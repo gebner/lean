@@ -234,6 +234,7 @@ order for the change to take effect."
   ("phomotopy" . ("~*"))
 
   ("p" . ("↣"))
+  ("pr" . ("↣"))
 
   ("1" . ("₁"))
   ("2" . ("₂"))
