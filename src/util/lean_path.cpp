@@ -311,4 +311,20 @@ std::string path_append(char const * p1, char const * p2) {
     r += p2;
     return r;
 }
+
+std::string olean_of_lean(std::string const & lean_fn) {
+    if (lean_fn.size() > 5 && lean_fn.substr(lean_fn.size() - 5) == ".lean") {
+        return lean_fn.substr(0, lean_fn.size() - 5) + ".olean";
+    } else {
+        throw exception(sstream() << "not a .lean file: " << lean_fn);
+    }
+}
+
+std::string read_file(std::string const & fname, std::ios_base::openmode mode) {
+    std::ifstream in(fname, mode);
+    if (!in.good()) throw file_not_found_exception(fname);
+    std::stringstream buf;
+    buf << in.rdbuf();
+    return buf.str();
+}
 }

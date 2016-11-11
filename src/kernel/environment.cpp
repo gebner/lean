@@ -146,6 +146,8 @@ environment environment::replace(certified_declaration const & t) const {
         throw_kernel_exception(*this, "invalid replacement of axiom with theorem, the new declaration is not a theorem");
     if (ax->get_type() != t.get_declaration().get_type())
         throw_kernel_exception(*this, "invalid replacement of axiom with theorem, the 'replace' operation can only be used when the axiom and theorem have the same type");
+    if (ax->get_univ_params() != t.get_declaration().get_univ_params())
+        throw_kernel_exception(*this, "invalid replacement of axiom with theorem, the 'replace' operation can only be used when the axiom and theorem have the same universe parameters");
     return environment(m_header, m_id, insert(m_declarations, n, t.get_declaration()), m_global_levels, m_extensions);
 }
 

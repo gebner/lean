@@ -54,7 +54,7 @@ public:
     virtual void report(io_state_stream const & ios, json & record) const override {
         record["full-id"] = m_full_id.to_string();
         if (auto olean = get_decl_olean(ios.get_environment(), m_full_id))
-            record["source"]["file"] = olean_file_to_lean_file(*olean);
+            record["source"]["file"] = *olean;
         if (auto pos = get_decl_pos_info(ios.get_environment(), m_full_id)) {
             record["source"]["line"] = pos->first;
             record["source"]["column"] = pos->second;

@@ -13,11 +13,11 @@ Author: Leonardo de Moura
 
 namespace lean {
 /** \brief Auxiliary object for "inserting" delimiters for flycheck */
-class flycheck_message_stream : public message_stream {
+class flycheck_message_stream : public message_buffer {
     std::ostream & m_out;
 public:
     flycheck_message_stream(std::ostream & out) : m_out(out) {}
     ~flycheck_message_stream() {}
-    void report(message const & msg) override;
+    void report(message_bucket_id const &, message const & msg) override;
 };
 }

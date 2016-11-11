@@ -493,9 +493,7 @@ environment declare_trace_cmd(parser & p) {
     return module::add(p.env(), *g_declare_trace_key, [=](environment const &, serializer & s) { s << cls; });
 }
 
-static void declare_trace_reader(deserializer & d, shared_environment &,
-                                 std::function<void(asynch_update_fn const &)> &,
-                                 std::function<void(delayed_update_fn const &)> &) {
+static void declare_trace_reader(deserializer & d, environment &) {
     name cls;
     d >> cls;
     register_trace_class(cls);

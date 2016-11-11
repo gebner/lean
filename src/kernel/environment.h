@@ -109,6 +109,7 @@ class environment {
 
     friend class shared_environment;
     friend class inductive::certified_inductive_decl;
+public: // FIXME(gabriel): make friendly again
     /**
        \brief Adds a declaration that was not type checked.
 

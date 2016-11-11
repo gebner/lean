@@ -6,6 +6,8 @@ Author: Gabriel Ebner
 */
 #pragma once
 #include <string>
+#include <vector>
+#include <util/period.h>
 #include "kernel/pos_info_provider.h"
 #include "util/output_channel.h"
 #include "util/exception.h"
@@ -39,20 +41,57 @@ public:
     std::string get_text() const { return m_text; }
 };
 
-class message_stream {
-public:
-    virtual ~message_stream() {}
-    virtual void report(message const & msg) = 0;
+struct message_bucket_id {
+    name m_bucket;
+    period m_version;
 };
 
-class output_channel_message_stream : public message_stream {
-    options                         m_options;
+class message_buffer {
+public:
+    virtual ~message_buffer() {}
+    virtual void start_bucket(message_bucket_id const & bucket);
+    virtual void report(message_bucket_id const & bucket, message const & msg);
+    virtual void finish_bucket(message_bucket_id const & bucket, std::vector<name> const & children);
+};
+
+using null_message_buffer = message_buffer;
+
+class stream_message_buffer : public message_buffer {
     std::shared_ptr<output_channel> m_out;
 public:
-    output_channel_message_stream(options const & opts, std::shared_ptr<output_channel> const & out) :
-            m_options(opts), m_out(out) {}
-    ~output_channel_message_stream() {}
-    void report(message const & msg) override;
+    stream_message_buffer(std::shared_ptr<output_channel> const & out) : m_out(out) {}
+    void report(message_bucket_id const & bucket, message const & msg) override;
 };
+
+message_buffer & get_global_message_buffer();
+class scoped_message_buffer {
+    message_buffer * m_old;
+public:
+    scoped_message_buffer(message_buffer * msg_buf);
+    ~scoped_message_buffer();
+};
+
+class scope_message_context {
+    scope_message_context * m_old;
+    message_bucket_id m_bucket;
+    std::vector<name> m_sub_buckets;
+public:
+    scope_message_context(message_bucket_id const &);
+    scope_message_context(message_bucket_id const &, std::vector<name> const & sub_buckets_to_reuse);
+    scope_message_context(std::string const &, std::vector<name> const & sub_buckets_to_reuse);
+    scope_message_context(std::string const &);
+    scope_message_context();
+    ~scope_message_context();
+
+    message_bucket_id get_bucket_id() const { return m_bucket; }
+    std::vector<name> get_sub_buckets() const { return m_sub_buckets; }
+
+    message_bucket_id new_sub_bucket();
+    message_bucket_id new_sub_bucket(std::string const &);
+};
+
+message_bucket_id get_global_msg_bucket_id();
+scope_message_context & get_scope_message_context();
+void report_message(message const &);
 
 }

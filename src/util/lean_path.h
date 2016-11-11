@@ -53,6 +53,10 @@ void display_path(std::ostream & out, std::string const & fname);
 std::string dirname(char const * fname);
 std::string path_append(char const * path1, char const * path2);
 
+std::string olean_of_lean(std::string const & lean_fn);
+
+std::string read_file(std::string const & fname, std::ios_base::openmode mode = std::ios_base::in);
+
 void initialize_lean_path();
 void finalize_lean_path();
 }

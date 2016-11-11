@@ -10,13 +10,13 @@ Author: Gabriel Ebner
 #include "util/output_channel.h"
 #include "util/exception.h"
 #include "library/io_state_stream.h"
+#include "library/messages.h"
 
 namespace lean {
 
 /** Buider for a message object.  Automatically reports the message on destruction. */
 class message_builder {
     pos_info_provider const *              m_pos_info_provider;
-    io_state const &                       m_ios;
     std::shared_ptr<abstract_type_context> m_tc;
     std::string                            m_file_name;
     pos_info                               m_pos;
@@ -36,7 +36,7 @@ public:
                     message_severity severity);
 
     message build();
-    void report() { m_ios.report(build()); }
+    void report() { report_message(build()); }
 
     message_builder & set_file_name(std::string const & file_name) { m_file_name = file_name; return *this; }
     message_builder & set_pos(pos_info const & pos) { m_pos = pos; return *this; }
