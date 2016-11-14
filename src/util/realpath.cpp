@@ -37,7 +37,7 @@ std::string lrealpath(char const * fname) {
     char * tmp = realpath(fname, nullptr);
     if (tmp) {
         std::string r(tmp);
-        ::free(tmp);
+        free(tmp);
         return r;
     } else {
         throw file_not_found_exception(fname);
