@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-REALPATH=realpath
-
 if [ $# -ne 3 -a $# -ne 2 ]; then
     echo "Usage: test_single.sh [lean-executable-path] [file] [yes/no]?"
     exit 1
 fi
 ulimit -s unlimited
 LEAN=$1
-ROOT_PATH=$($REALPATH ../../..)
+ROOT_PATH=$(readlink -f ../../..)
 export LEAN_PATH=$ROOT_PATH/library:.
 if [ $# -ne 3 ]; then
     INTERACTIVE=no
