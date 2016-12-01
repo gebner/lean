@@ -5,7 +5,13 @@ if [ $# -ne 3 -a $# -ne 2 ]; then
 fi
 ulimit -s unlimited
 LEAN=$1
-ROOT_PATH=$(readlink -f ../../..)
+if command -v greadlink >/dev/null 2>&1; then
+  # macOS readlink doesn't support -f option
+  READLINK=greadlink
+else
+  READLINK=readlink
+fi
+ROOT_PATH=$($READLINK -f ../../..)
 export LEAN_PATH=$ROOT_PATH/library:.
 if [ $# -ne 3 ]; then
     INTERACTIVE=no
