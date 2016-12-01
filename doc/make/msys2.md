@@ -19,39 +19,23 @@ It has a package management system, [pacman][pacman], which is used in Arch Linu
 Here are the commands to install all dependencies needed to compile Lean on your machine.
 
 ```bash
-# Install gcc (4.9.1)
-pacman -S mingw-w64-x86_64-gcc
-
-# Install mpfr, gmp, lua
-pacman -S mingw-w64-x86_64-mpfr mingw-w64-x86_64-gmp
-
-# Install ninja, cmake
-pacman -S mingw-w64-x86_64-ninja mingw-w64-x86_64-cmake
-
-# Install git
-pacman -S git
+pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-mpfr mingw-w64-x86_64-ninja mingw-w64-x86_64-cmake git
 ```
 
-Close the msys2 shell and add `c:\msys64\mingw64\bin` into the `PATH`
-environment variable.
-
- - Windows 7/8: Control Panel > System and Security > System > Advanced
-   System Settings > Environment Variables... > Edit User variable
-   `Path`
+Open the "MSYS2 MinGW 64-bit" terminal.
 
 ## Build Lean
 
 In the [msys2] shell, execute the following commands.
 
 ```bash
-cd /c/
 git clone https://github.com/leanprover/lean
 git clone http://github.com/leanprover/emacs-dependencies
 mkdir -p lean/src/emacs/dependencies
 cp -R emacs-dependencies/* lean/src/emacs/dependencies
 cd lean
 mkdir build && cd build
-cmake -D CMAKE_CXX_COMPILER=g++.exe -G Ninja ../src
+cmake ../src -G Ninja -D CMAKE_BUILD_TYPE=Release
 ninja
 ```
 
