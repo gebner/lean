@@ -174,7 +174,7 @@ do state ← state_t.read, return state^.prec
 
 meta def get_term_order : prover (expr → expr → bool) := do
 state ← state_t.read,
-return $ mk_lpo (map name_of_funsym state^.prec)
+mk_lpo state^.prec
 
 private meta def set_precedence (new_prec : list expr) : prover unit :=
 do state ← state_t.read, state_t.write { state with prec := new_prec }
