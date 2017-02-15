@@ -40,7 +40,7 @@ vm_obj vm_sorry() {
                               << ": trying to evaluate sorry");
 }
 
-vm_obj vm_undefined_core(vm_obj const &, vm_obj const & message) {
+vm_obj vm_undefined(vm_obj const &, vm_obj const &, vm_obj const & message) {
     throw exception(to_string(message));
 }
 
@@ -61,7 +61,7 @@ void initialize_vm_aux() {
     DECLARE_VM_BUILTIN("trace",            vm_trace);
     DECLARE_VM_BUILTIN("trace_call_stack", vm_trace_call_stack);
     DECLARE_VM_BUILTIN("sorry",            vm_sorry);
-    DECLARE_VM_BUILTIN("undefined_core",   vm_undefined_core);
+    DECLARE_VM_BUILTIN("undefined",        vm_undefined);
     DECLARE_VM_BUILTIN("try_for",          vm_try_for);
 }
 

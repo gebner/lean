@@ -31,6 +31,9 @@ f ()
   This is a deterministic way of interrupting long running tasks. -/
 meta constant try_for {α : Type u} (max : nat) (f : thunk α) : option α
 
-meta constant undefined_core {α : Type u} (message : string) : α
+meta constant undefined {α : Sort u} [nonempty α] (message : string := "undefined") : α
 
-meta def undefined {α : Type u} : α := undefined_core "undefined"
+private meta def unsafe_default (α : Sort u) : α := unsafe_default
+
+meta def unsafe_undefined {α : Sort u} (message : string := "undefined") : α :=
+@undefined (unit → α) (nonempty.intro (λ _, unsafe_default α)) message ()
