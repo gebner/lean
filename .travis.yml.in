@@ -61,6 +61,14 @@ matrix:
        MULTI_THREAD=OFF
 
    - os: linux
+     addons:
+       apt:
+         sources:
+           - *apt_sources
+           - sourceline: ppa:hvr/z3
+         packages:
+           - *default_packages
+           - z3
      env:
        CMAKE_CXX_COMPILER=g++-4.9
        CMAKE_BUILD_TYPE=Release
