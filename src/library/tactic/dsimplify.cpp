@@ -342,8 +342,12 @@ vm_obj simp_lemmas_dsimplify_core(vm_obj const & max_steps, vm_obj const & visit
         dsimplify_fn F(ctx, dcs, force_to_unsigned(max_steps, std::numeric_limits<unsigned>::max()),
                        to_bool(visit_instances), dlemmas, use_eta);
         expr new_e = F(to_expr(e));
-        tactic_state new_s = set_mctx_dcs(s, F.mctx(), dcs);
-        return tactic::mk_success(to_obj(new_e), new_s);
+        if (new_e != to_expr(e)) {
+            tactic_state new_s = set_mctx_dcs(s, F.mctx(), dcs);
+            return tactic::mk_success(to_obj(new_e), new_s);
+        } else {
+            return tactic::mk_exception("dsimplify tactic failed to simplify", s);
+        }
     } catch (exception & ex) {
         return tactic::mk_exception(ex, s);
     }
