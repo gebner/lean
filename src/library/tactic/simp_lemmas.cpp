@@ -11,6 +11,7 @@ Author: Leonardo de Moura
 #include "kernel/for_each_fn.h"
 #include "kernel/find_fn.h"
 #include "library/constants.h"
+#include "library/app_builder.h"
 #include "library/trace.h"
 #include "library/util.h"
 #include "library/reducible.h"
@@ -1372,8 +1373,7 @@ static bool instantiate_emetas(type_context & ctx, vm_obj const & prove_fn, unsi
     return !failed;
 }
 
-
-static simp_result simp_lemma_rewrite(type_context & ctx, simp_lemma const & sl, vm_obj const & prove_fn, expr const & e, tactic_state const & s) {
+static simp_result simp_lemma_rewrite_core(type_context & ctx, simp_lemma const & sl, vm_obj const & prove_fn, expr const & e, tactic_state const & s) {
     type_context::tmp_mode_scope scope(ctx, sl.get_num_umeta(), sl.get_num_emeta());
     if (!ctx.is_def_eq(sl.get_lhs(), e)) {
         lean_trace(name({"simp_lemmas", "rewrite", "failure"}), tout() << "fail to unify: " << sl.get_id() << "\n";);
@@ -1402,6 +1402,41 @@ static simp_result simp_lemma_rewrite(type_context & ctx, simp_lemma const & sl,
     expr pf = ctx.instantiate_mvars(sl.get_proof());
     return simp_result(new_rhs, pf);
 }
+
+static simp_result simp_lemma_rewrite(type_context & ctx, simp_lemma const & sl, vm_obj const & prove_fn, expr const & e, tactic_state const & s) {
+    if (!is_app(e))
+        return simp_lemma_rewrite_core(ctx, sl, prove_fn, e, s);
+    unsigned e_nargs   = get_app_num_args(e);
+    unsigned lhs_nargs = get_app_num_args(sl.get_lhs());
+    if (e_nargs == lhs_nargs)
+        return simp_lemma_rewrite_core(ctx, sl, prove_fn, e, s);
+    if (e_nargs < lhs_nargs)
+        return simp_result(e);
+    buffer<expr> extra_args;
+    unsigned i = e_nargs;
+    auto it = e;
+    while (i > lhs_nargs) {
+        --i;
+        extra_args.push_back(app_arg(it));
+        it = app_fn(it);
+    }
+    lean_assert(get_app_num_args(it) == lhs_nargs);
+    simp_result it_r = simp_lemma_rewrite_core(ctx, sl, prove_fn, it, s);
+    if (it_r.get_new() == it)
+        return simp_result(e);
+    expr new_e = mk_rev_app(it_r.get_new(), extra_args);
+//    new_e      = reduce(new_e);
+    if (!it_r.has_proof())
+        return simp_result(new_e);
+    expr pr = it_r.get_proof();
+    i = extra_args.size();
+    while (i > 0) {
+        --i;
+        pr = mk_congr_fun(ctx, pr, extra_args[i]);
+    }
+    return simp_result(new_e, pr);
+}
+
 
 vm_obj simp_lemmas_rewrite_core(transparency_mode const & m, simp_lemmas const & sls, vm_obj const & prove_fn,
                                 name const & R, expr const & e, tactic_state const & s) {
