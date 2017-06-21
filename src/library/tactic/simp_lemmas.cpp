@@ -1398,7 +1398,6 @@ static simp_result simp_lemma_rewrite_core(type_context & ctx, simp_lemma const 
             return simp_result(e);
         }
     }
-
     expr pf = ctx.instantiate_mvars(sl.get_proof());
     return simp_result(new_rhs, pf);
 }

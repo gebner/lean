@@ -97,13 +97,13 @@ meta def trace {α : Type} [has_to_tactic_format α] (a : α) : conv unit :=
 meta def trace_lhs : conv unit :=
 lhs >>= trace
 
-meta def apply_lemmas_core (s : simp_lemmas) (prove : tactic unit) : conv unit :=
+meta def apply_lemmas_core (m : transparency) (s : simp_lemmas) (prove : tactic unit) : conv unit :=
 λ r e, do
-  (new_e, pr) ← s.rewrite prove r e,
+  (new_e, pr) ← s.rewrite_core m prove r e,
   return ⟨(), new_e, some pr⟩
 
 meta def apply_lemmas (s : simp_lemmas) : conv unit :=
-apply_lemmas_core s failed
+apply_lemmas_core reducible s failed
 
 /- adapter for using iff-lemmas as eq-lemmas -/
 meta def apply_propext_lemmas_core (s : simp_lemmas) (prove : tactic unit) : conv unit :=
