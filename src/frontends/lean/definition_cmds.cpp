@@ -703,7 +703,18 @@ static expr elaborate_proof(
         if (is_equations_result(val))
             val = get_equations_result(val, 0);
         buffer<expr> params; for (auto & e : params_list) params.push_back(e);
-        finalize_theorem_proof(elab, params, val, finfo);
+        if (get_profiler(opts)) {
+            xtimeit timer(get_profiling_threshold(opts), [&](second_duration duration) {
+                auto msg = message_builder(decl_env, get_global_ios(), file_name, header_pos, INFORMATION);
+                msg.get_text_stream().get_stream()
+                        << "finalization of " << local_pp_name(fn) << " took " << display_profiling_time{duration} << "\n";
+                msg.report();
+            });
+            finalize_theorem_proof(elab, params, val, finfo);
+        } else {
+            finalize_theorem_proof(elab, params, val, finfo);
+        }
+
         if (is_rfl_lemma && !lean::is_rfl_lemma(final_type, val))
             throw exception("not a rfl-lemma, even though marked as rfl");
         return inline_new_defs(decl_env, elab.env(), local_pp_name(fn), val);
