@@ -323,6 +323,7 @@ vm_obj eigen_read_mnist(vm_obj const & _dirname, vm_obj const &, vm_obj const &)
     Eigen::ArrayXXf train_images = read_mnist_images(train_images_filename);
     Eigen::ArrayXf train_labels = read_mnist_labels(train_labels_filename);
     std::cout << "finished reading mnist" << std::endl;
+    std::cout << train_images.rows() << "x" << train_images.cols() << " " << train_labels.size() << std::endl;
 
     return mk_io_result(mk_vm_pair(to_obj(train_images), to_obj(train_labels)));
 }
