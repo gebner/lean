@@ -319,13 +319,16 @@ vm_obj eigen_read_mnist(vm_obj const & _dirname, vm_obj const &, vm_obj const &)
     std::string train_images_filename = dirname + "/train-images-idx3-ubyte";
     std::string train_labels_filename = dirname + "/train-labels-idx1-ubyte";
 
-    std::cout << "reading mnist..." << std::endl;
     Eigen::ArrayXXf train_images = read_mnist_images(train_images_filename);
     Eigen::ArrayXf train_labels = read_mnist_labels(train_labels_filename);
-    std::cout << "finished reading mnist" << std::endl;
-    std::cout << train_images.rows() << "x" << train_images.cols() << " " << train_labels.size() << std::endl;
 
-    return mk_io_result(mk_vm_pair(to_obj(train_images), to_obj(train_labels)));
+    if (train_images.rows() == 60000 && train_images.cols() == 784 && train_labels.size() == 60000) {
+        return mk_io_result(mk_vm_pair(to_obj(train_images), to_obj(train_labels)));
+    } else {
+        throw exception(sstream() << "mnist data has wrong dimensions, found ("
+                        << train_images.rows() << "x" << train_images.cols() <<", " << train_labels.size()
+                        << "), expected (60000x784, 60000)");
+    }
 }
 
 vm_obj eigen_write_to_file(vm_obj const & /* shape */, vm_obj const & x, vm_obj const & _filename, vm_obj const &, vm_obj const &) {
