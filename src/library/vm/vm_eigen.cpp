@@ -441,15 +441,21 @@ vm_obj io_mkdir(vm_obj const & dir_name, vm_obj const &, vm_obj const &) {
     return mk_io_result(mk_vm_nat(status));
 }
 
+vm_obj eigen_set_num_threads(vm_obj const & n, vm_obj const &, vm_obj const &) {
+    Eigen::setNbThreads(to_unsigned(n));
+    return mk_io_result(mk_vm_unit());
+}
+
 void initialize_vm_eigen() {
     Eigen::initParallel();
-    Eigen::setNbThreads(2);
 
     DECLARE_VM_BUILTIN(name({"certigrad", "RNG"}),                   eigen_dummy);
     DECLARE_VM_BUILTIN(name({"certigrad", "T"}),                     eigen_dummy);
 
     DECLARE_VM_BUILTIN(name({"certigrad", "RNG", "to_string"}),      eigen_rng_to_string);
     DECLARE_VM_BUILTIN(name({"certigrad", "RNG", "mk"}),             eigen_mk_rng);
+
+    DECLARE_VM_BUILTIN(name({"certigrad", "T", "set_num_threads"}),  eigen_set_num_threads);
 
     DECLARE_VM_BUILTIN(name({"certigrad", "T", "to_string"}),        eigen_to_string);
     DECLARE_VM_BUILTIN(name({"certigrad", "T", "fail"}),             eigen_fail);
