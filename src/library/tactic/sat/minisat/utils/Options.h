@@ -80,7 +80,6 @@ class Option
     virtual ~Option() {}
 
     virtual bool parse             (const char* str)      = 0;
-    virtual void help              (bool verbose = false) = 0;
 
     friend  void parseOptions      (int& argc, char** argv, bool strict);
     friend  void printUsageAndExit (int  argc, char** argv, bool verbose);
@@ -157,20 +156,6 @@ class DoubleOption : public Option
 
         return true;
     }
-
-    virtual void help (bool verbose = false){
-        fprintf(stderr, "  -%-12s = %-8s %c%4.2g .. %4.2g%c (default: %g)\n", 
-                name, type_name, 
-                range.begin_inclusive ? '[' : '(', 
-                range.begin,
-                range.end,
-                range.end_inclusive ? ']' : ')', 
-                value);
-        if (verbose){
-            fprintf(stderr, "\n        %s\n", description);
-            fprintf(stderr, "\n");
-        }
-    }
 };
 
 
@@ -214,26 +199,6 @@ class IntOption : public Option
 
         return true;
     }
-
-    virtual void help (bool verbose = false){
-        fprintf(stderr, "  -%-12s = %-8s [", name, type_name);
-        if (range.begin == INT32_MIN)
-            fprintf(stderr, "imin");
-        else
-            fprintf(stderr, "%4d", range.begin);
-
-        fprintf(stderr, " .. ");
-        if (range.end == INT32_MAX)
-            fprintf(stderr, "imax");
-        else
-            fprintf(stderr, "%4d", range.end);
-
-        fprintf(stderr, "] (default: %d)\n", value);
-        if (verbose){
-            fprintf(stderr, "\n        %s\n", description);
-            fprintf(stderr, "\n");
-        }
-    }
 };
 
 
@@ -276,26 +241,6 @@ class Int64Option : public Option
 
         return true;
     }
-
-    virtual void help (bool verbose = false){
-        fprintf(stderr, "  -%-12s = %-8s [", name, type_name);
-        if (range.begin == INT64_MIN)
-            fprintf(stderr, "imin");
-        else
-            fprintf(stderr, "%4"PRIi64, range.begin);
-
-        fprintf(stderr, " .. ");
-        if (range.end == INT64_MAX)
-            fprintf(stderr, "imax");
-        else
-            fprintf(stderr, "%4"PRIi64, range.end);
-
-        fprintf(stderr, "] (default: %"PRIi64")\n", value);
-        if (verbose){
-            fprintf(stderr, "\n        %s\n", description);
-            fprintf(stderr, "\n");
-        }
-    }
 };
 #endif
 
@@ -323,14 +268,6 @@ class StringOption : public Option
         value = span;
         return true;
     }
-
-    virtual void help (bool verbose = false){
-        fprintf(stderr, "  -%-10s = %8s\n", name, type_name);
-        if (verbose){
-            fprintf(stderr, "\n        %s\n", description);
-            fprintf(stderr, "\n");
-        }
-    }    
 };
 
 
@@ -362,21 +299,6 @@ class BoolOption : public Option
         }
 
         return false;
-    }
-
-    virtual void help (bool verbose = false){
-
-        fprintf(stderr, "  -%s, -no-%s", name, name);
-
-        for (uint32_t i = 0; i < 32 - strlen(name)*2; i++)
-            fprintf(stderr, " ");
-
-        fprintf(stderr, " ");
-        fprintf(stderr, "(default: %s)\n", value ? "on" : "off");
-        if (verbose){
-            fprintf(stderr, "\n        %s\n", description);
-            fprintf(stderr, "\n");
-        }
     }
 };
 
