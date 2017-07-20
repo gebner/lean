@@ -27,6 +27,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "minisat/mtl/IntMap.h"
 #include "minisat/utils/Options.h"
 #include "minisat/core/SolverTypes.h"
+#include <functional>
 
 
 namespace Minisat {
@@ -68,6 +69,9 @@ public:
     bool    okay         () const;                  // FALSE means solver is in a conflicting state
 
     bool    implies      (const vec<Lit>& assumps, vec<Lit>& out);
+
+    virtual void on_learned(std::function<void(vec<Lit> const &)> && fn) { m_learned = fn; }
+    virtual void on_forgotten(std::function<void(vec<Lit> const &)> && fn) { m_forgotten = fn; }
 
     // Iterate over clauses and top-level assignments:
     ClauseIterator clausesBegin() const;
@@ -235,6 +239,8 @@ protected:
     int64_t             conflict_budget;    // -1 means no budget.
     int64_t             propagation_budget; // -1 means no budget.
     bool                asynch_interrupt;
+
+    std::function<void(vec<Lit> const &)> m_learned, m_forgotten;
 
     // Main internal methods:
     //

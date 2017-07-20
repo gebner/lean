@@ -452,6 +452,7 @@ file(GLOB_RECURSE LEAN_SOURCES
   "${LEAN_SOURCE_DIR}"
   "${LEAN_SOURCE_DIR}/[A-Za-z]*.cpp"
   "${LEAN_SOURCE_DIR}/[A-Za-z]*.h")
+list(FILTER LEAN_SOURCES EXCLUDE REGEX library/tactic/sat/minisat/.*)
 add_style_check_target(style "${LEAN_SOURCES}")
 add_test(NAME style_check COMMAND "${PYTHON_EXECUTABLE}" "${LEAN_SOURCE_DIR}/cmake/Modules/cpplint.py" ${LEAN_SOURCES})
 endif()

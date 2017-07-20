@@ -158,13 +158,28 @@ bool Solver::addClause_(vec<Lit>& ps)
 
     // Check if clause is satisfied and remove false/duplicate literals:
     sort(ps);
-    Lit p; int i, j;
+
+    vec<Lit>    oc;
+    oc.clear();
+
+    Lit p; int i, j, flag = 0;
+    for (i = j = 0, p = lit_Undef; i < ps.size(); i++) {
+        oc.push(ps[i]);
+        if (value(ps[i]) == l_True || ps[i] == ~p || value(ps[i]) == l_False)
+          flag = 1;
+    }
+
     for (i = j = 0, p = lit_Undef; i < ps.size(); i++)
         if (value(ps[i]) == l_True || ps[i] == ~p)
             return true;
         else if (value(ps[i]) != l_False && ps[i] != p)
             ps[j++] = p = ps[i];
     ps.shrink(i - j);
+
+    if (flag) {
+        if (m_learned) m_learned(ps);
+        if (m_forgotten) m_forgotten(oc);
+    }
 
     if (ps.size() == 0)
         return ok = false;
@@ -211,6 +226,11 @@ void Solver::detachClause(CRef cr, bool strict){
 
 void Solver::removeClause(CRef cr) {
     Clause& c = ca[cr];
+
+    vec<Lit> lits(c.size());
+    for (int i = 0; i < c.size(); i++) lits[i] = c[i];
+    if (m_forgotten) m_forgotten(lits);
+
     detachClause(cr);
     // Don't leave pointers to free'd memory!
     if (locked(c)) vardata[var(c[0])].reason = CRef_Undef;
@@ -727,6 +747,7 @@ lbool Solver::search(int nof_conflicts)
                 claBumpActivity(ca[cr]);
                 uncheckedEnqueue(learnt_clause[0], cr);
             }
+            if (m_learned) m_learned(learnt_clause);
 
             varDecayActivity();
             claDecayActivity();
