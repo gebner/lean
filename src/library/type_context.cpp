@@ -108,6 +108,8 @@ bool type_context_cache::is_transparent(transparency_mode m, declaration const &
     name const & n = d.get_name();
     if (m_proj_info.contains(n))
         return false;
+    if (d.is_theorem())
+        return false;
     if (m == transparency_mode::All)
         return true;
     if (d.is_theorem() && !get_unfold_lemmas(get_options()))

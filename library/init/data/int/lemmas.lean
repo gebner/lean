@@ -20,11 +20,12 @@ theorem neg_succ_of_nat_div (m : nat) {b : ℤ} (H : b > 0) :
   -[1+m] / b = -(m / b + 1) :=
 match b, eq_succ_of_zero_lt H with ._, ⟨n, rfl⟩ := rfl end
 
-set_option type_context.unfold_lemmas true
 @[simp] protected theorem div_neg : ∀ (a b : ℤ), a / -b = -(a / b)
 | (m : ℕ) 0       := show of_nat (m / 0) = -(m / 0 : ℕ), by rw nat.div_zero; refl
 | (m : ℕ) (n+1:ℕ) := rfl
-| 0       -[1+ n] := rfl
+| 0       -[1+ n] :=
+  show int.div (0:ℕ) (n.succ) = int.neg (int.div (0 : ℕ) -[1+ n]),
+  by { simp [int.div, int.neg], unfold has_neg.neg, simp [int.neg, neg_of_nat], refl }
 | (m+1:ℕ) -[1+ n] := (neg_neg _).symm
 | -[1+ m] 0       := rfl
 | -[1+ m] (n+1:ℕ) := rfl
@@ -51,8 +52,8 @@ match a, b, eq_neg_succ_of_lt_zero Ha, eq_succ_of_zero_lt Hb with
 end
 
 @[simp] protected theorem zero_div : ∀ (b : ℤ), 0 / b = 0
-| 0       := rfl
-| (n+1:ℕ) := rfl
+| (0:ℕ)   := by simp [int.div]
+| (n+1:ℕ) := by simp [int.div]
 | -[1+ n] := rfl
 
 @[simp] protected theorem div_zero : ∀ (a : ℤ), a / 0 = 0

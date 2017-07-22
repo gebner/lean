@@ -360,7 +360,7 @@ optional<declaration> type_checker::is_delta(expr const & e) const {
     expr const & f = get_app_fn(e);
     if (is_constant(f)) {
         if (auto d = m_env.find(const_name(f)))
-            if (d->is_definition())
+            if (d->is_definition() && !d->is_theorem())
                 return d;
     }
     return none_declaration();
