@@ -267,6 +267,15 @@ else()
     set(EXTRA_LIBS ${EXTRA_LIBS} ${GMP_LIBRARIES})
 endif()
 
+find_package(LLVM 3.6)
+if (LLVM_FOUND)
+  message(STATUS "Using LLVM ${LLVM_VERSION_STRING}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D LEAN_LLVM")
+  include_directories(${LLVM_CXXFLAGS})
+  # add_definitions(${LLVM_DEFINITIONS})
+  set(EXTRA_LIBS ${EXTRA_LIBS} ${LLVM_LIBRARIES})
+endif()
+
 # DL
 if (EMSCRIPTEN)
     # no dlopen
