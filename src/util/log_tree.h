@@ -39,6 +39,7 @@ public:
         DefaultLevel = 100,
         ElaborationLevel = 200,
         CrossModuleLintLevel = 1000,
+        OleanCachingLevel = 2000,
         MaxLevel = std::numeric_limits<detail_level>::max();
 
     struct node_cell {

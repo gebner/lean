@@ -94,7 +94,9 @@ static module_loader mk_loader(module_id const & cur_mod, std::vector<module_inf
     };
 }
 
-static gtask compile_olean(std::shared_ptr<module_info const> const & mod, log_tree::node const & parsing_lt) {
+static gtask compile_olean(std::shared_ptr<module_info const> const & mod,
+        log_tree::node const & parsing_lt,
+        log_tree::detail_level lvl, bool server_mode) {
     auto errs = has_errors(parsing_lt);
 
     gtask mod_dep = mk_deep_dependency(mod->m_result, [] (buffer<gtask> & deps, module_info::parse_result const & res) {
@@ -108,12 +110,15 @@ static gtask compile_olean(std::shared_ptr<module_info const> const & mod, log_t
         if (dep.m_mod_info)
             olean_deps.push_back(dep.m_mod_info->m_olean_task);
 
-    return add_library_task(task_builder<unit>([mod, errs] {
+    return add_library_task(task_builder<unit>([mod, errs, server_mode] {
         if (mod->m_source != module_src::LEAN)
             throw exception("cannot build olean from olean");
         auto res = get(mod->m_result);
 
-        if (get(errs)) throw exception("not creating olean file because of errors");
+        if (get(errs)) {
+            if (server_mode) return unit();
+            throw exception("not creating olean file because of errors");
+        }
 
         auto olean_fn = olean_of_lean(mod->m_mod);
         exclusive_file_lock output_lock(olean_fn);
@@ -122,7 +127,8 @@ static gtask compile_olean(std::shared_ptr<module_info const> const & mod, log_t
         out.close();
         if (!out) throw exception("failed to write olean file");
         return unit();
-    }).depends_on(mod_dep).depends_on(olean_deps).depends_on(errs), std::string("saving olean"));
+    }).depends_on(mod_dep).depends_on(olean_deps).depends_on(errs),
+        std::string("saving olean"), lvl);
 }
 
 // TODO(gabriel): adapt to vfs
@@ -296,7 +302,7 @@ module_mgr::build_lean(module_id const & id, std::string const & contents, time_
 
     if (m_save_olean) {
         scope_log_tree_core lt3(&lt);
-        mod->m_olean_task = compile_olean(mod, lt2.get());
+        mod->m_olean_task = compile_olean(mod, lt2.get(), *m_save_olean, m_server_mode);
     }
 
     return mod;

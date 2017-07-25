@@ -78,7 +78,7 @@ public:
 
 class module_mgr {
     bool m_server_mode = false;
-    bool m_save_olean = false;
+    optional<log_tree::detail_level> m_save_olean;
 
     search_path m_path;
     environment m_initial_env;
@@ -116,8 +116,17 @@ public:
     void set_server_mode(bool use_snapshots) { m_server_mode = use_snapshots; }
     bool get_server_mode() const { return m_server_mode; }
 
-    void set_save_olean(bool save_olean) { m_save_olean = save_olean; }
-    bool get_save_olean() const { return m_save_olean; }
+    void enable_save_olean() { enable_save_olean(log_tree::DefaultLevel); }
+    void enable_save_olean(log_tree::detail_level lvl) { m_save_olean = lvl; }
+    void disable_save_olean() { m_save_olean = {}; }
+    void set_save_olean(bool enable) {
+        if (enable) {
+            enable_save_olean();
+        } else {
+            disable_save_olean();
+        }
+    }
+    optional<log_tree::detail_level> get_save_olean() const { return m_save_olean; }
 
     environment get_initial_env() const { return m_initial_env; }
     options get_options() const { return m_ios.get_options(); }

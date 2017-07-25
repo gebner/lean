@@ -38,7 +38,7 @@ public:
     emscripten_shell(): m_env(mk_environment(LEAN_BELIEVER_TRUST_LEVEL + 1)),
                         m_ios(options({"trace", "as_messages"}, true),
                               mk_pretty_formatter_factory()),
-                        m_server(0, get_lean_js_path(), m_env, m_ios) {}
+                        m_server(0, get_lean_js_path(), m_env, m_ios, false) {}
 
     int process_request(std::string msg) {
         scope_global_ios scoped_ios(m_ios);
