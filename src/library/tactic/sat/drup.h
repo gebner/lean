@@ -30,4 +30,7 @@ drup_proof const & drup_proof_refutation(expr const &);
 serializer & operator<<(serializer &, drup_proof const &);
 deserializer & operator>>(deserializer &, drup_proof &);
 
+void initialize_drup();
+void finalize_drup();
+
 }

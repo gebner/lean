@@ -35,6 +35,7 @@ name const & get_cast_heq_name();
 name const & get_char_name();
 name const & get_char_of_nat_name();
 name const & get_char_of_nat_ne_of_ne_name();
+name const & get_classical_by_contradiction_name();
 name const & get_classical_prop_decidable_name();
 name const & get_classical_type_decidable_eq_name();
 name const & get_coe_name();

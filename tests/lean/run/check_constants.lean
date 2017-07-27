@@ -33,6 +33,7 @@ run_cmd script_check_id `cast_heq
 run_cmd script_check_id `char
 run_cmd script_check_id `char.of_nat
 run_cmd script_check_id `char.of_nat_ne_of_ne
+run_cmd script_check_id `classical.by_contradiction
 run_cmd script_check_id `classical.prop_decidable
 run_cmd script_check_id `classical.type_decidable_eq
 run_cmd script_check_id `coe

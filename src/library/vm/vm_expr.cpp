@@ -24,6 +24,7 @@ Author: Leonardo de Moura
 #include "library/string.h"
 #include "library/vm/vm.h"
 #include "library/vm/vm_nat.h"
+#include "library/vm/vm_int.h"
 #include "library/vm/vm_name.h"
 #include "library/vm/vm_format.h"
 #include "library/vm/vm_options.h"
@@ -35,6 +36,7 @@ Author: Leonardo de Moura
 #include "library/vm/vm_rb_map.h"
 #include "library/compiler/simp_inductive.h"
 #include "library/compiler/nat_value.h"
+#include "library/tactic/sat/drup.h"
 
 namespace lean {
 struct vm_macro_definition : public vm_external {
@@ -475,6 +477,25 @@ vm_obj expr_has_local_in(vm_obj const & e, vm_obj const & s) {
     return mk_vm_bool(contains_local(to_expr(e), to_name_set(s)));
 }
 
+vm_obj expr_mk_drup_proof(vm_obj const & _vs, vm_obj const & _cs, vm_obj const & _ref) {
+    std::vector<expr> vs;
+    for (auto & v : to_list<expr>(_vs, to_expr)) vs.push_back(v);
+
+    std::vector<expr> cs;
+    for (auto & c : to_list<expr>(_cs, to_expr)) cs.push_back(c);
+
+    drup_proof proof;
+    for (auto & _line : to_list<vm_obj>(_ref, [] (vm_obj const & o) { return o; })) {
+        drup_proof_line line;
+        for (auto & l : to_list<int>(_line, [] (vm_obj const & o) { return to_int(o); })) {
+            line.m_cls.push_back(l);
+        }
+        proof.push_back(line);
+    }
+
+    return to_obj(mk_drup_proof_macro(std::move(vs), std::move(cs), std::move(proof)));
+}
+
 void initialize_vm_expr() {
     DECLARE_VM_BUILTIN(name({"expr", "var"}),              expr_var_intro);
     DECLARE_VM_BUILTIN(name({"expr", "sort"}),             expr_sort_intro);
@@ -530,6 +551,8 @@ void initialize_vm_expr() {
 
     DECLARE_VM_BUILTIN(name("expr", "mk_sorry"), expr_mk_sorry);
     DECLARE_VM_BUILTIN(name("expr", "is_sorry"), expr_is_sorry);
+
+    DECLARE_VM_BUILTIN(name("expr", "mk_drup_proof"), expr_mk_drup_proof);
 
     // Not sure if we should expose these or what?
     DECLARE_VM_BUILTIN(name({"expr", "is_internal_cnstr"}), expr_is_internal_cnstr);

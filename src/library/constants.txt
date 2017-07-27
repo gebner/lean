@@ -28,6 +28,7 @@ cast_heq
 char
 char.of_nat
 char.of_nat_ne_of_ne
+classical.by_contradiction
 classical.prop_decidable
 classical.type_decidable_eq
 coe

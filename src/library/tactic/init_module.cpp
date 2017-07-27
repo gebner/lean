@@ -38,6 +38,7 @@ Author: Leonardo de Moura
 #include "library/tactic/hole_command.h"
 #include "library/tactic/backward/init_module.h"
 #include "library/tactic/smt/init_module.h"
+#include "library/tactic/sat/drup.h"
 
 namespace lean {
 void initialize_tactic_module() {
@@ -75,8 +76,10 @@ void initialize_tactic_module() {
     initialize_algebraic_normalizer();
     initialize_hole_command();
     initialize_smt_module();
+    initialize_drup();
 }
 void finalize_tactic_module() {
+    finalize_drup();
     finalize_smt_module();
     finalize_hole_command();
     finalize_algebraic_normalizer();

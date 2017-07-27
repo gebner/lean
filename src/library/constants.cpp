@@ -33,6 +33,7 @@ name const * g_cast_heq = nullptr;
 name const * g_char = nullptr;
 name const * g_char_of_nat = nullptr;
 name const * g_char_of_nat_ne_of_ne = nullptr;
+name const * g_classical_by_contradiction = nullptr;
 name const * g_classical_prop_decidable = nullptr;
 name const * g_classical_type_decidable_eq = nullptr;
 name const * g_coe = nullptr;
@@ -410,6 +411,7 @@ void initialize_constants() {
     g_char = new name{"char"};
     g_char_of_nat = new name{"char", "of_nat"};
     g_char_of_nat_ne_of_ne = new name{"char", "of_nat_ne_of_ne"};
+    g_classical_by_contradiction = new name{"classical", "by_contradiction"};
     g_classical_prop_decidable = new name{"classical", "prop_decidable"};
     g_classical_type_decidable_eq = new name{"classical", "type_decidable_eq"};
     g_coe = new name{"coe"};
@@ -788,6 +790,7 @@ void finalize_constants() {
     delete g_char;
     delete g_char_of_nat;
     delete g_char_of_nat_ne_of_ne;
+    delete g_classical_by_contradiction;
     delete g_classical_prop_decidable;
     delete g_classical_type_decidable_eq;
     delete g_coe;
@@ -1165,6 +1168,7 @@ name const & get_cast_heq_name() { return *g_cast_heq; }
 name const & get_char_name() { return *g_char; }
 name const & get_char_of_nat_name() { return *g_char_of_nat; }
 name const & get_char_of_nat_ne_of_ne_name() { return *g_char_of_nat_ne_of_ne; }
+name const & get_classical_by_contradiction_name() { return *g_classical_by_contradiction; }
 name const & get_classical_prop_decidable_name() { return *g_classical_prop_decidable; }
 name const & get_classical_type_decidable_eq_name() { return *g_classical_type_decidable_eq; }
 name const & get_coe_name() { return *g_coe; }
