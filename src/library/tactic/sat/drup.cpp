@@ -47,10 +47,10 @@ struct drup_replayer {
     }
 
     void add_input_clause(sat_clause const & cls, expr proof) {
-        if (m_proofs) {
-            proof = m_proof_defs.push_let("c", m_ctx.infer(proof), proof);
-        }
         unsigned cidx = m_clauses.size();
+        if (m_proofs) {
+            proof = m_proof_defs.push_let(name((sstream() << "c_" << cidx).str()), m_ctx.infer(proof), proof);
+        }
         m_clauses.push_back(cls);
         m_clause_proofs.push_back(proof);
         m_watched.push_back({0,0});
@@ -72,7 +72,7 @@ struct drup_replayer {
             type_context::tmp_locals locals(m_ctx);
             for (auto lit : cls) {
                 auto & var = m_vars[var_of_lit(lit)-1];
-                auto local = locals.push_local("h",
+                auto local = locals.push_local(m_h,
                     lit >= 0 ? mk_not(m_ctx, var) : var,
                     binder_info());
                 assign(-lit, local);
@@ -115,6 +115,8 @@ private:
     std::vector<pair<sat_lit, sat_lit>> m_watched;
 
     std::vector<list<unsigned>> m_watchers;
+
+    name m_h {"h"};
 
     sat_lit var_of_lit(sat_lit lit) const {
         return lit >= 0 ? lit : -lit;
@@ -160,7 +162,7 @@ private:
                 proof = mk_app(proof, m_assignment_proofs[var_of_lit(cls[i])]);
             }
         }
-        proof = mk_lambda("h", expr_of_lit(-lit), proof);
+        proof = mk_lambda(m_h, expr_of_lit(-lit), proof);
         if (lit >= 0) {
             proof = mk_app(m_ctx, get_classical_by_contradiction_name(), {proof});
         }
