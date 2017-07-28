@@ -12,7 +12,9 @@ Author: Gabriel Ebner
 #include "library/app_builder.h"
 #include "util/fresh_name.h"
 
-#define LEAN_DRUP_MACROS_TRUST_LEVEL 1024
+#ifndef LEAN_DRUP_MACRO_TRUST_LEVEL
+#define LEAN_DRUP_MACRO_TRUST_LEVEL 1024
+#endif
 
 namespace lean {
 
@@ -32,15 +34,22 @@ void cons_in_place(list<T> & l, T const & a) {
 struct drup_replayer {
     drup_replayer(type_context & ctx, std::vector<expr> const & vars,
             bool proofs = true) :
-        m_ctx(ctx), m_vars(vars), m_num_vars(vars.size()), m_proofs(proofs),
+        m_ctx(ctx), m_proof_defs(ctx), m_proofs(proofs), m_vars(vars), m_num_vars(vars.size()),
         m_assignment(m_num_vars+1), m_assignment_proofs(m_num_vars+1),
         m_watchers(m_num_vars+1) {}
 
-    optional<expr> const & is_inconsistent() {
-        return m_inconsistent;
+    bool is_inconsistent() const {
+        return !!m_inconsistent;
     }
 
-    void add_input_clause(sat_clause const & cls, expr const & proof) {
+    expr get_proof() {
+        return m_proofs ? m_proof_defs.mk_lambda(*m_inconsistent) : expr();
+    }
+
+    void add_input_clause(sat_clause const & cls, expr proof) {
+        if (m_proofs) {
+            proof = m_proof_defs.push_let("c", m_ctx.infer(proof), proof);
+        }
         unsigned cidx = m_clauses.size();
         m_clauses.push_back(cls);
         m_clause_proofs.push_back(proof);
@@ -55,37 +64,39 @@ struct drup_replayer {
 
     void add_rup_clause(sat_clause const & cls) {
         if (m_inconsistent) return;
-            
-        // std::cerr << "rup:"; print_clause(cls);print_state();
 
         unsigned trail_base = m_trail.size();
 
-        type_context::tmp_locals locals(m_ctx);
-        for (auto lit : cls) {
-            auto & var = m_vars[var_of_lit(lit)-1];
-            auto local = locals.push_local("h",
-                lit >= 0 ? mk_not(m_ctx, var) : var,
-                binder_info());
-            assign(-lit, local);
-        }
-        propagation_loop();
-        // print_state();
-        undo_trail(trail_base);
+        expr pr;
+        {
+            type_context::tmp_locals locals(m_ctx);
+            for (auto lit : cls) {
+                auto & var = m_vars[var_of_lit(lit)-1];
+                auto local = locals.push_local("h",
+                    lit >= 0 ? mk_not(m_ctx, var) : var,
+                    binder_info());
+                assign(-lit, local);
+            }
+            propagation_loop();
+            undo_trail(trail_base);
 
-        if (!m_inconsistent) {
-            lean_assert(false);
-            throw exception("clause is not rup");
-        }
-        auto pr = *m_inconsistent;
-        m_inconsistent = none_expr();
+            if (!m_inconsistent) {
+                lean_assert(false);
+                throw exception("clause is not rup");
+            }
+            pr = *m_inconsistent;
+            m_inconsistent = none_expr();
 
-        pr = m_proofs ? locals.mk_lambda(pr) : expr();
+            pr = m_proofs ? locals.mk_lambda(pr) : expr();
+        }
+
         add_input_clause(cls, pr);
     }
 
 private:
 
     type_context & m_ctx;
+    type_context::tmp_locals m_proof_defs;
     bool m_proofs;
     
     std::vector<expr> const & m_vars;
@@ -171,8 +182,6 @@ private:
                 }
             }
         }
-        // print_clause(cls);
-        // std::cerr << watched_lits.first << " " << watched_lits.second << std::endl;
         if (!watched_lits.first) {
             m_inconsistent = mk_false_propagation(idx);
             return true;
@@ -226,7 +235,6 @@ private:
         sat_lit var = var_of_lit(lit);
         auto ws = m_watchers[var];
         for (auto cls_idx : ws) {
-            // std::cerr << "propagate " << cls_idx; print_clause(m_clauses[cls_idx]);
             propagate_clause(cls_idx);
         }
     }
@@ -266,7 +274,7 @@ void drup_replayer::print_state() const {
     std::cerr << std::endl;
 }
 
-static expr expand_drup_macro(expr const & e, bool create_proof);
+static expr expand_drup_macro(type_context & ctx, expr const & e, bool create_proof);
 
 struct drup_proof_macro_cell : public macro_definition_cell {
     unsigned m_num_vars;
@@ -278,15 +286,19 @@ struct drup_proof_macro_cell : public macro_definition_cell {
     virtual name get_name() const { return *g_drup_proof_name; }
     
     virtual expr check_type(expr const & e, abstract_type_context & ctx, bool) const {
-        // TODO(gabriel)
+        type_context tc(ctx.env(), options());
+        expand_drup_macro(tc, e, false);
         return mk_false();
     }
 
     virtual unsigned trust_level() const {
-        return LEAN_DRUP_MACROS_TRUST_LEVEL;
+        return LEAN_DRUP_MACRO_TRUST_LEVEL;
     }
 
-    virtual optional<expr> expand(expr const & e, abstract_type_context & ctx) const;
+    virtual optional<expr> expand(expr const & e, abstract_type_context & ctx) const {
+        type_context tc(ctx.env(), options());
+        return some_expr(expand_drup_macro(tc, e, true));
+    }
 
     virtual void write(serializer & s) const {
         s.write_string(*g_drup_proof_opcode);
@@ -357,7 +369,7 @@ drup_proof const & drup_proof_refutation(expr const & e) {
     return cell->m_refutation;
 }
     
-static expr expand_drup_macro(expr const & e, bool create_proof) {
+static expr expand_drup_macro(type_context & ctx, expr const & e, bool create_proof) {
     auto vars = drup_proof_vars(e);
 
     std::unordered_map<expr, sat_lit, expr_hash> var2idx;
@@ -385,8 +397,7 @@ static expr expand_drup_macro(expr const & e, bool create_proof) {
         return res;
     };
 
-    type_context tc(ctx.env(), options(), create_proof);
-    drup_replayer replayer(tc, vars);
+    drup_replayer replayer(ctx, vars, create_proof);
     for (auto cls : drup_proof_clauses(e)) {
         replayer.add_input_clause(parse_cls(cls), cls);
     }
@@ -400,7 +411,7 @@ static expr expand_drup_macro(expr const & e, bool create_proof) {
         throw exception("invalid drup proof");
     }
 
-    return *replayer.is_inconsistent();
+    return replayer.get_proof();
 }
 
 serializer & operator<<(serializer & s, drup_proof const & pr) {
