@@ -6,11 +6,11 @@ Author: Leonardo de Moura
 */
 #include <unordered_map>
 #include "frontends/lean/parser_config.h"
-#include "kernel/quotient/quotient.h"
 #include "kernel/expr_maps.h"
 #include "kernel/for_each_fn.h"
 #include "kernel/instantiate.h"
 #include "kernel/inductive/inductive.h"
+#include "kernel/computation/computation.h"
 #include "library/module.h"
 #include "library/unfold_macros.h"
 
@@ -29,7 +29,6 @@ class exporter {
     name_hmap<unsigned>          m_name2idx;
     level_map<unsigned>          m_level2idx;
     expr_bi_struct_map<unsigned> m_expr2idx;
-    bool                         m_quotient_exported = false;
 
     unsigned export_name(name const & n) {
         auto it = m_name2idx.find(n);
@@ -217,8 +216,10 @@ class exporter {
         // do not export meta declarations
         if (!d.is_trusted()) return;
 
-        if (is_quotient_decl(m_env, d.get_name()))
-            return export_quotient();
+        for (auto & cn : get_computation_rules_for(m_env, d.get_name())) {
+            export_computation_rule(cn);
+        }
+
         if (inductive::is_inductive_decl(m_env, d.get_name()))
             return export_inductive(d.get_name());
         if (auto ind_type = inductive::is_intro_rule(m_env, d.get_name()))
@@ -234,8 +235,16 @@ class exporter {
         if (d.is_definition()) {
             return export_definition(d);
         } else {
-            return export_axiom(d);
+            export_axiom(d);
         }
+    }
+
+    void export_computation_rule(name const & n) {
+        auto c = get_computation_rule(m_env, n);
+        export_dependencies(c.m_packed);
+        auto n_ = export_name(n);
+        auto c_ = export_expr(c.m_packed);
+        m_out << "#COMP " << n_ << " " << c_ << "\n";
     }
 
     void export_inductive(name const & n) {
@@ -283,16 +292,6 @@ class exporter {
             });
     }
 
-    void export_quotient() {
-        if (m_quotient_exported) return;
-        m_quotient_exported = true;
-
-        for (auto & n : quotient_required_decls())
-            export_declaration(n);
-
-        m_out << "#QUOT\n";
-    }
-
     void export_notation(notation_entry const & entry) {
         if (entry.parse_only()) return;
         if (length(entry.get_transitions()) != 1) return;
@@ -332,8 +331,6 @@ public:
     void operator()(optional<list<name>> const & decls) {
         m_name2idx[{}] = 0;
         m_level2idx[{}] = 0;
-        if (has_quotient(m_env))
-            export_quotient();
         if (decls) {
             for (auto & d : *decls)
                 export_declaration(d);

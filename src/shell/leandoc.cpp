@@ -7,7 +7,6 @@ Author: Leonardo de Moura
 #include <string>
 #include <iostream>
 #include "kernel/inductive/inductive.h"
-#include "kernel/quotient/quotient.h"
 #include "library/documentation.h"
 #include "library/io_state.h"
 #include "library/type_context.h"
@@ -36,8 +35,6 @@ static char const * get_decl_kind(environment const & env, name const & id) {
         if (inductive::is_intro_rule(env, id)) return "Constructor";
 
         if (inductive::is_elim_rule(env, id)) return "Eliminator";
-
-        if (is_quotient_decl(env, id)) return "Quotient type builtin";
 
         if (d.is_axiom()) return "Axiom";
 
@@ -147,8 +144,6 @@ static void print_id_info(std::ostream & out, environment const & env, formatter
             print_constant(out, env, fmt, "constructor", d);
                 } else if (inductive::is_elim_rule(env, id)) {
             print_constant(out, env, fmt, "eliminator", d);
-        } else if (is_quotient_decl(env, id)) {
-            print_constant(out, env, fmt, "builtin-quotient-type-constant", d);
         } else if (d.is_axiom()) {
             print_constant(out, env, fmt, "axiom", d);
         } else {

@@ -34,6 +34,7 @@ Author: Leonardo de Moura
 #include "library/typed_expr.h"
 #include "library/documentation.h"
 #include "library/placeholder.h"
+#include "library/noncomputable.h"
 #include "library/vm/vm.h"
 #include "library/vm/vm_io.h"
 #include "library/vm/vm_string.h"
@@ -372,10 +373,6 @@ static environment help_cmd(parser & p) {
     return p.env();
 }
 
-static environment init_quotient_cmd(parser & p) {
-    return module::declare_quotient(p.env());
-}
-
 /*
    Temporary procedure that converts metavariables in \c e to metavar_context metavariables.
    After we convert the frontend to type_context, we will not need to use this procedure.
@@ -535,6 +532,22 @@ environment add_key_equivalence_cmd(parser & p) {
     return add_key_equivalence(p.env(), h1, h2);
 }
 
+environment unsafe_make_computable_cmd(parser & p) {
+    name n = p.check_constant_next("invalid unsafe_make_computable command, constant expected");
+    name r = p.check_constant_next("invalid unsafe_make_computable command, constant expected");
+
+    auto env = p.env();
+
+    if (auto d = get_vm_decl(env, r)) {
+        if (d->is_bytecode()) {
+            env = add_vm_code(env, n, d->get_expr(),
+                d->get_code_size(), d->get_code(), d->get_args_info(), optional<pos_info>());
+        }
+    }
+
+    return bless_computable(env, n);
+}
+
 static environment run_command_cmd(parser & p) {
     /* initial state for executing the tactic */
     module::scope_pos_info scope_pos(p.pos());
@@ -570,9 +583,9 @@ void init_cmd_table(cmd_table & r) {
     add_cmd(r, cmd_info("#eval",             "evaluate given expression using VM", eval_cmd));
     add_cmd(r, cmd_info("local",             "define local attributes or notation", local_cmd));
     add_cmd(r, cmd_info("#help",             "brief description of available commands and options", help_cmd));
-    add_cmd(r, cmd_info("init_quotient",     "initialize quotient type computational rules", init_quotient_cmd));
     add_cmd(r, cmd_info("declare_trace",     "declare a new trace class (for debugging Lean tactics)", declare_trace_cmd));
     add_cmd(r, cmd_info("add_key_equivalence", "register that to symbols are equivalence for key-matching", add_key_equivalence_cmd));
+    add_cmd(r, cmd_info("unsafe_make_computable", "...", unsafe_make_computable_cmd));
     add_cmd(r, cmd_info("run_cmd",           "execute an user defined command at top-level", run_command_cmd));
     add_cmd(r, cmd_info("import",            "import module(s)", import_cmd));
     add_cmd(r, cmd_info("#unify",            "(for debugging purposes)", unify_cmd));

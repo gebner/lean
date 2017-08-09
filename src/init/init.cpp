@@ -11,7 +11,7 @@ Author: Leonardo de Moura
 #include "util/sexpr/init_module.h"
 #include "kernel/init_module.h"
 #include "kernel/inductive/inductive.h"
-#include "kernel/quotient/quotient.h"
+#include "kernel/computation/computation.h"
 #include "library/init_module.h"
 #include "library/tactic/init_module.h"
 #include "library/constructions/init_module.h"
@@ -33,7 +33,7 @@ void initialize() {
     initialize_sexpr_module();
     initialize_kernel_module();
     initialize_inductive_module();
-    initialize_quotient_module();
+    initialize_computation_module();
     init_default_print_fn();
     initialize_library_core_module();
     initialize_vm_core_module();
@@ -69,7 +69,7 @@ void finalize() {
     finalize_library_module();
     finalize_vm_core_module();
     finalize_library_core_module();
-    finalize_quotient_module();
+    finalize_computation_module();
     finalize_inductive_module();
     finalize_kernel_module();
     finalize_sexpr_module();

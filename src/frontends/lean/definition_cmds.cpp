@@ -281,8 +281,12 @@ declare_definition(parser & p, environment const & env, def_cmd_kind kind, buffe
     if (meta.m_doc_string) {
         new_env = add_doc_string(new_env, c_real_name, *meta.m_doc_string);
     }
-    // note: some attribute handlers rely on the new definition being compiled already
-    new_env = meta.m_attrs.apply(new_env, p.ios(), c_real_name);
+    try {
+        // note: some attribute handlers rely on the new definition being compiled already
+        new_env = meta.m_attrs.apply(new_env, p.ios(), c_real_name);
+    } catch (exception & ex) {
+        (p.mk_message(pos, ERROR) << "failed to set attributes:\n").set_exception(ex).report();
+    }
     return mk_pair(new_env, c_real_name);
 }
 

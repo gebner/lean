@@ -12,7 +12,7 @@ Author: Gabriel Ebner
 #include <string>
 #include <iostream>
 #include <unordered_map>
-#include "kernel/quotient/quotient.h"
+#include "kernel/computation/computation.h"
 
 namespace lean {
 
@@ -84,6 +84,12 @@ struct text_importer {
         m_env = m_env.add(check(m_env, mk_axiom(m_name.at(name_idx), ls, m_expr.at(type_idx))));
     }
 
+    void handle_comp_rule(std::istream & in) {
+        unsigned name_idx, eqn_idx;
+        in >> name_idx >> eqn_idx;
+        m_env = declare_computation_rule(m_env, m_name.at(name_idx), {m_expr.at(eqn_idx)});
+    }
+
     void handle_notation(std::istream & in, lowlevel_notation_kind kind) {
         unsigned name_idx, prec;
         in >> name_idx >> prec;
@@ -124,8 +130,8 @@ struct text_importer {
             handle_def(in);
         } else if (cmd == "#AX") {
             handle_ax(in);
-        } else if (cmd == "#QUOT") {
-            m_env = declare_quotient(m_env);
+        } else if (cmd == "#COMP") {
+            handle_comp_rule(in);
         } else if (cmd == "#PREFIX") {
             handle_notation(in, lowlevel_notation_kind::Prefix);
         } else if (cmd == "#POSTFIX") {

@@ -3,7 +3,7 @@ attribute [instance] bag_setoid
 
 
 definition bag (A : Type) : Type :=
-quotient (bag_setoid A)
+quotient (list A)
 
 constant subcount : ∀ {A}, list A → list A → bool
 constant list.count : ∀ {A}, A → list A → nat

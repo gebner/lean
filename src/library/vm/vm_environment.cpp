@@ -17,6 +17,7 @@ Author: Leonardo de Moura
 #include "library/fingerprint.h"
 #include "library/relation_manager.h"
 #include "library/inductive_compiler/ginductive.h"
+#include "library/noncomputable.h"
 #include "library/vm/vm_nat.h"
 #include "library/vm/vm_name.h"
 #include "library/vm/vm_option.h"
