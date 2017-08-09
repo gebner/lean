@@ -12,7 +12,6 @@ Author: Leonardo de Moura
 #include "util/sexpr/option_declarations.h"
 #include "kernel/for_each_fn.h"
 #include "kernel/inductive/inductive.h"
-#include "kernel/quotient/quotient.h"
 #include "library/util.h"
 #include "library/class.h"
 #include "library/aliases.h"
@@ -371,8 +370,6 @@ void print_id_info(parser & p, message_builder & out, name const & id, bool show
                 print_constant(p, out, "constructor", d);
             } else if (inductive::is_elim_rule(env, c)) {
                 print_constant(p, out, "eliminator", d);
-            } else if (is_quotient_decl(env, c)) {
-                print_constant(p, out, "builtin-quotient-type-constant", d);
             } else if (d.is_axiom()) {
                 print_constant(p, out, "axiom", d);
             } else {

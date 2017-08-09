@@ -19,7 +19,7 @@ Author: Leonardo de Moura
 #include "library/compiler/inliner.h"
 namespace lean {
 struct noncomputable_ext : public environment_extension {
-    name_set m_noncomputable;
+    name_map<bool> m_noncomputable;
     noncomputable_ext() {}
 };
 
@@ -42,29 +42,32 @@ struct noncomputable_modification : public modification {
     LEAN_MODIFICATION("ncomp")
 
     name m_decl;
+    bool m_val = true;
 
-    noncomputable_modification() {}
-    noncomputable_modification(name const & decl) : m_decl(decl) {}
+    noncomputable_modification(name const & decl, bool val = true) :
+        m_decl(decl), m_val(val) {}
 
     void perform(environment & env) const override {
         noncomputable_ext ext = get_extension(env);
-        ext.m_noncomputable.insert(m_decl);
+        ext.m_noncomputable.insert(m_decl, m_val);
         env = update(env, ext);
     }
 
     void serialize(serializer & s) const override {
-        s << m_decl;
+        s << m_val << m_decl;
     }
 
     static std::shared_ptr<modification const> deserialize(deserializer & d) {
-        return std::make_shared<noncomputable_modification>(read_name(d));
+        bool val; name decl;
+        d >> val >> decl;
+        return std::make_shared<noncomputable_modification>(decl, val);
     }
 };
 
 static bool is_noncomputable(type_checker & tc, noncomputable_ext const & ext, name const & n) {
     environment const & env = tc.env();
-    if (ext.m_noncomputable.contains(n))
-        return true;
+    if (auto v = ext.m_noncomputable.find(n))
+        return *v;
     declaration const & d = env.get(n);
     if (!d.is_trusted()) {
         return false; /* ignore nontrusted definitions */
@@ -89,10 +92,11 @@ bool is_marked_noncomputable(environment const & env, name const & n) {
 }
 
 environment mark_noncomputable(environment const & env, name const & n) {
-    auto ext = get_extension(env);
-    ext.m_noncomputable.insert(n);
-    environment new_env = update(env, ext);
-    return module::add(new_env, std::make_shared<noncomputable_modification>(n));
+    return module::add_and_perform(env, std::make_shared<noncomputable_modification>(n));
+}
+
+environment bless_computable(environment const & env, name const & n) {
+    return module::add_and_perform(env, std::make_shared<noncomputable_modification>(n, false));
 }
 
 struct get_noncomputable_reason_fn {

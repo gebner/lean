@@ -33,24 +33,25 @@ section
 open quotient
 variables {α : Sort u} {β : α → Sort v}
 
-@[instance]
 private def fun_setoid (α : Sort u) (β : α → Sort v) : setoid (Π x : α, β x) :=
 setoid.mk (@function.equiv α β) (function.equiv.is_equivalence α β)
 
+local attribute [instance] fun_setoid
+
 private def extfun (α : Sort u) (β : α → Sort v) : Sort (imax u v) :=
-quotient (fun_setoid α β)
+quotient (Π x : α, β x)
 
 private def fun_to_extfun (f : Π x : α, β x) : extfun α β :=
 ⟦f⟧
 private def extfun_app (f : extfun α β) : Π x : α, β x :=
 assume x,
-quot.lift_on f
+quotient.lift_on f
   (λ f : Π x : α, β x, f x)
   (λ f₁ f₂ h, h x)
 
 theorem funext {f₁ f₂ : Π x : α, β x} (h : ∀ x, f₁ x = f₂ x) : f₁ = f₂ :=
 show extfun_app ⟦f₁⟧ = extfun_app ⟦f₂⟧, from
-congr_arg extfun_app (sound h)
+congr_arg extfun_app (quotient.sound h)
 end
 
 attribute [intro!] funext

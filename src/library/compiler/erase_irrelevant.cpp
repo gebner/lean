@@ -343,20 +343,6 @@ class erase_irrelevant_fn : public compiler_step_visitor {
         return add_args(r, 5, args);
     }
 
-    expr visit_quot_lift(buffer<expr> const & args) {
-        lean_assert(args.size() >= 6);
-        expr f = visit(args[3]);
-        expr q = visit(args[5]);
-        expr r = beta_reduce(mk_app(f, q));
-        return add_args(r, 6, args);
-    }
-
-    expr visit_quot_mk(buffer<expr> const & args) {
-        lean_assert(args.size() >= 3);
-        expr r = visit(args[2]);
-        return add_args(r, 3, args);
-    }
-
     expr visit_pack_unpack(expr const & fn, buffer<expr> const & args) {
         optional<inverse_info> info = has_inverse(env(), const_name(fn));
         if (!info || info->m_arity > args.size()) {
@@ -391,10 +377,6 @@ class erase_irrelevant_fn : public compiler_step_visitor {
                 return visit_and_cases_on(args);
             } else if (n == get_and_rec_name()) {
                 return visit_and_rec(args);
-            } else if (n == get_quot_lift_name()) {
-                return visit_quot_lift(args);
-            } else if (n == get_quot_mk_name()) {
-                return visit_quot_mk(args);
             } else if (n == get_subtype_rec_name()) {
                 return visit_subtype_rec(args);
             } else if (is_cases_on_recursor(env(), n)) {

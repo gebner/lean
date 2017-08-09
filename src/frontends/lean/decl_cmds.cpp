@@ -78,7 +78,7 @@ static environment universes_cmd(parser & p) {
     return universes_cmd_core(p, false);
 }
 
-enum class variable_kind { Constant, Parameter, Variable, Axiom };
+enum class variable_kind { Constant, Parameter, Variable, Axiom, ComputationRule };
 
 static void check_parameter_type(parser & p, name const & n, expr const & type, pos_info const & pos) {
     for_each(type, [&](expr const & e, unsigned) {
@@ -111,7 +111,7 @@ static environment declare_var(parser & p, environment env,
             p.add_variable(n, l);
         return env;
     } else {
-        lean_assert(k == variable_kind::Constant || k == variable_kind::Axiom);
+        lean_assert(k == variable_kind::Constant || k == variable_kind::Axiom | k == variable_kind::ComputationRule);
         name const & ns = get_namespace(env);
         name full_n  = ns + n;
 
@@ -124,6 +124,8 @@ static environment declare_var(parser & p, environment env,
 
         if (k == variable_kind::Axiom) {
             env = module::add(env, check(env, mk_axiom(full_n, ls, new_type)));
+        } else if (k == variable_kind::ComputationRule) {
+            return module::add_computation_rule(env, n, new_type);
         } else {
             bool is_trusted = !meta.m_modifiers.m_is_meta;
             env = module::add(env, check(env, mk_constant_assumption(full_n, ls, new_type, is_trusted)));
@@ -293,6 +295,9 @@ static environment axiom_cmd(parser & p, cmd_meta const & meta)    {
     if (meta.m_modifiers.m_is_meta)
         throw exception("invalid 'meta' modifier for axiom");
     return variable_cmd_core(p, variable_kind::Axiom, meta);
+}
+static environment comp_rule_cmd(parser & p, cmd_meta const & meta)    {
+    return variable_cmd_core(p, variable_kind::ComputationRule, meta);
 }
 static environment constant_cmd(parser & p, cmd_meta const & meta)    {
     return variable_cmd_core(p, variable_kind::Constant, meta);
@@ -558,6 +563,7 @@ void register_decl_cmds(cmd_table & r) {
     add_cmd(r, cmd_info("parameters",      "declare new parameters", parameters_cmd));
     add_cmd(r, cmd_info("constants",       "declare new constants (aka top-level variables)", constants_cmd));
     add_cmd(r, cmd_info("axioms",          "declare new axioms", axioms_cmd));
+    add_cmd(r, cmd_info("computation_rule", "declare new axioms", comp_rule_cmd));
     add_cmd(r, cmd_info("meta",            "add new meta declaration", modifiers_cmd, false));
     add_cmd(r, cmd_info("mutual",          "add new mutal declaration", modifiers_cmd, false));
     add_cmd(r, cmd_info("noncomputable",   "add new noncomputable definition", modifiers_cmd, false));

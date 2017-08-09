@@ -21,7 +21,7 @@ Author: Leonardo de Moura
 #include "util/name_map.h"
 #include "util/file_lock.h"
 #include "kernel/type_checker.h"
-#include "kernel/quotient/quotient.h"
+#include "kernel/computation/computation.h"
 #include "library/module.h"
 #include "library/noncomputable.h"
 #include "library/sorry.h"
@@ -361,17 +361,27 @@ struct inductive_modification : public modification {
     }
 };
 
-struct quot_modification : public modification {
-    LEAN_MODIFICATION("quot")
+struct comp_modification : public modification {
+    LEAN_MODIFICATION("comp_rule")
+
+    name m_name;
+    expr m_eqn;
+
+    comp_modification(name const & n, expr const & eqn) :
+        m_name(n), m_eqn(eqn) {}
 
     void perform(environment & env) const override {
-        env = ::lean::declare_quotient(env);
+        env = ::lean::declare_computation_rule(env, m_name, {m_eqn});
     }
 
-    void serialize(serializer &) const override {}
+    void serialize(serializer & s) const override {
+        s << m_name << m_eqn;
+    }
 
-    static std::shared_ptr<modification const> deserialize(deserializer &) {
-        return std::make_shared<quot_modification>();
+    static std::shared_ptr<modification const> deserialize(deserializer & d) {
+        name n; expr eqn;
+        d >> n >> eqn;
+        return std::make_shared<comp_modification>(n, eqn);
     }
 };
 
@@ -470,10 +480,6 @@ bool is_definition(environment const & env, name const & n) {
     return ext.m_module_defs.contains(n);
 }
 
-environment declare_quotient(environment const & env) {
-    return add_and_perform(env, std::make_shared<quot_modification>());
-}
-
 using inductive::certified_inductive_decl;
 
 environment add_inductive(environment                       env,
@@ -488,6 +494,11 @@ environment add_inductive(environment                       env,
     new_env = add_decl_pos_info(new_env, decl.m_name);
     return add(new_env, std::make_shared<inductive_modification>(cdecl, env.trust_lvl()));
 }
+
+environment add_computation_rule(environment const & env, name const & n, expr const & eqn) {
+    return add_and_perform(env, std::make_shared<comp_modification>(n, eqn));
+}
+
 } // end of namespace module
 
 olean_data parse_olean(std::istream & in, std::string const & file_name, bool check_hash) {
@@ -666,13 +677,13 @@ void initialize_module() {
     g_object_readers = new object_readers();
     decl_modification::init();
     inductive_modification::init();
-    quot_modification::init();
+    comp_modification::init();
     pos_info_mod::init();
 }
 
 void finalize_module() {
-    quot_modification::finalize();
     pos_info_mod::finalize();
+    comp_modification::finalize();
     inductive_modification::finalize();
     decl_modification::finalize();
     delete g_object_readers;
