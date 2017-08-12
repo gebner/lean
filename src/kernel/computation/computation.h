@@ -31,6 +31,7 @@ struct computation_rule {
     void validate(environment const & env) const;
     name get_head_symbol() const;
     optional<expr> match(expr const & e) const;
+    optional<expr> match(expr const & fn, buffer<expr> const & args) const;
 
     optional<unsigned> get_major_premise() const;
 };

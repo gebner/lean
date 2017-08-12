@@ -64,14 +64,18 @@ static expr instantiate_univ_params(expr const & e, name_map<level> subst) {
 }
 
 optional<expr> computation_rule::match(expr const & e) const {
+    buffer<expr> args;
+    auto fn = get_app_args(e, args);
+    return match(fn, args);
+}
+
+optional<expr> computation_rule::match(expr const & fn, buffer<expr> const & args) const {
     auto eqn = m_packed;
     unsigned num_vars = 0;
     for (; is_pi(eqn); num_vars++) eqn = binding_body(eqn);
     auto & lhs = app_arg(app_fn(eqn));
     auto & rhs = app_arg(eqn);
 
-    buffer<expr> args;
-    auto fn = get_app_args(e, args);
     buffer<expr> lhs_args;
     auto lhs_fn = get_app_args(lhs, lhs_args);
 
@@ -189,14 +193,16 @@ computation_rule get_computation_rule(environment const & env, name const & n) {
 }
 
 optional<expr> computation_normalizer_extension::operator()(expr const & e, abstract_type_context & ctx) const {
-    expr const & fn         = get_app_fn(e);
-    if (!is_constant(fn))
-        return none_expr();
-    environment const & env = ctx.env();
-    computation_env_ext const & ext = get_extension(env);
-    if (auto rules = ext.m_head_map.find(const_name(fn))) {
+    buffer<expr> args;
+    auto & fn = get_app_args(e, args);
+    if (!is_constant(fn)) return none_expr();
+    auto & env = ctx.env();
+    if (auto rules = get_extension(env).m_head_map.find(const_name(fn))) {
         for (auto & r : *rules) {
-            if (auto red = r.second.match(e)) {
+            if (auto major = r.second.get_major_premise()) {
+                args[*major] = ctx.whnf(args[*major]);
+            }
+            if (auto red = r.second.match(fn, args)) {
                 return red;
             }
         }

@@ -39,7 +39,7 @@ setoid.mk (@function.equiv α β) (function.equiv.is_equivalence α β)
 local attribute [instance] fun_setoid
 
 private def extfun (α : Sort u) (β : α → Sort v) : Sort (imax u v) :=
-quotient (Π x : α, β x)
+quotient (fun_setoid α β)
 
 private def fun_to_extfun (f : Π x : α, β x) : extfun α β :=
 ⟦f⟧
