@@ -243,6 +243,7 @@ struct parse_tactic_fn {
     }
 
     expr parse_elem_core(bool save_info) {
+        auto pos = m_p.pos();
         try {
             m_p.check_break_before();
             if (m_p.curr_is_identifier())
@@ -250,10 +251,10 @@ struct parse_tactic_fn {
         } catch (break_at_pos_exception & e) {
             e.m_token_info.m_context   = break_at_pos_exception::token_context::interactive_tactic;
             e.m_token_info.m_param     = m_tac_class;
+            if (save_info) e.report_goal_pos(pos);
             throw;
         }
         expr r;
-        auto pos = m_p.pos();
         if (auto dname = is_interactive_tactic(m_p, m_tac_class)) {
             try {
                 r = parse_interactive_tactic(m_p, *dname, m_tac_class, m_use_istep);
@@ -265,6 +266,7 @@ struct parse_tactic_fn {
                     e.m_token_info.m_token     = dname->get_string();
                     e.m_token_info.m_context   = break_at_pos_exception::token_context::interactive_tactic;
                     e.m_token_info.m_param     = m_tac_class;
+                    if (save_info) e.report_goal_pos(pos);
                 }
                 throw;
             }
@@ -355,7 +357,7 @@ struct parse_tactic_fn {
         expr r = left;
         while (m_p.curr_is_token(get_semicolon_tk())) {
             m_p.next();
-            expr curr = parse_elem(false);
+            expr curr = parse_elem(true);
             if (m_p.curr_is_token(get_orelse_tk()))
                 curr = parse_orelse(curr);
             r = andthen(r, curr, start_pos);
