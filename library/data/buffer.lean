@@ -112,11 +112,8 @@ instance : has_append (buffer α) :=
 instance [has_repr α] : has_repr (buffer α) :=
 ⟨repr ∘ to_list⟩
 
-meta instance [has_to_format α] : has_to_format (buffer α) :=
+instance {γ : Type w} [formattable γ] [has_to_fmt γ α] : has_to_fmt γ (buffer α) :=
 ⟨to_fmt ∘ to_list⟩
-
-meta instance [has_to_tactic_format α] : has_to_tactic_format (buffer α) :=
-⟨tactic.pp ∘ to_list⟩
 
 end buffer
 

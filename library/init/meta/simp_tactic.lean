@@ -43,7 +43,7 @@ meta constant is_valid_simp_lemma : expr → tactic bool
 
 meta constant simp_lemmas.pp : simp_lemmas → tactic format
 
-meta instance : has_to_tactic_format simp_lemmas :=
+meta instance : has_to_fmt tactic_format simp_lemmas :=
 ⟨simp_lemmas.pp⟩
 
 namespace tactic

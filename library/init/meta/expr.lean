@@ -5,7 +5,9 @@ Authors: Leonardo de Moura
 -/
 prelude
 import init.meta.level init.category.monad init.meta.rb_map
-universes u v
+universes u v w
+
+variables {γ : Type w} [formattable γ]
 
 structure pos :=
 (line   : nat)
@@ -17,8 +19,8 @@ instance : decidable_eq pos
   else is_false (λ contra, pos.no_confusion contra (λ e₁ e₂, absurd e₂ h₂))
 else is_false (λ contra, pos.no_confusion contra (λ e₁ e₂, absurd e₁ h₁))
 
-meta instance : has_to_format pos :=
-⟨λ ⟨l, c⟩, "⟨" ++ l ++ ", " ++ c ++ "⟩"⟩
+meta instance : has_to_fmt γ pos :=
+⟨λ ⟨l, c⟩, ↑"⟨" ++ ↑l ++ ↑", " ++ ↑c ++ ↑"⟩"⟩
 
 inductive binder_info
 | default | implicit | strict_implicit | inst_implicit | aux_decl
@@ -76,8 +78,7 @@ notation a ` =ₐ `:50 b:50 := expr.alpha_eqv a b = bool.tt
 
 protected meta constant expr.to_string : expr elab → string
 
-meta instance : has_to_string (expr elab) := ⟨expr.to_string⟩
-meta instance : has_to_format (expr elab) := ⟨λ e, e.to_string⟩
+meta instance : has_to_fmt γ (expr elab) := ⟨λ e, ↑e.to_string⟩
 
 /- Coercion for letting users write (f a) instead of (expr.app f a) -/
 meta instance : has_coe_to_fun (expr elab) :=
@@ -163,7 +164,7 @@ attribute [irreducible] reflected reflected.subst reflected.to_expr
 
 meta def reflect {α : Sort u} (a : α) [h : reflected a] : reflected a := h
 
-meta instance {α} (a : α) : has_to_format (reflected a) :=
+meta instance {α} (a : α) : has_to_fmt γ (reflected a) :=
 ⟨λ h, to_fmt h.to_expr⟩
 
 namespace expr
@@ -377,21 +378,21 @@ meta def pis : list expr → expr → expr
   pi pp info t (abstract_local (pis es f) uniq)
 | _ f := f
 
-open format
+open formattable
 
-private meta def p := λ xs, paren (format.join (list.intersperse " " xs))
+private meta def p : list γ → γ := λ xs, paren (join (list.intersperse space xs))
 
-meta def to_raw_fmt : expr elab → format
-| (var n) := p ["var", to_fmt n]
-| (sort l) := p ["sort", to_fmt l]
-| (const n ls) := p ["const", to_fmt n, to_fmt ls]
-| (mvar n m t)   := p ["mvar", to_fmt n, to_fmt m, to_raw_fmt t]
-| (local_const n m bi t) := p ["local_const", to_fmt n, to_fmt m, to_raw_fmt t]
-| (app e f) := p ["app", to_raw_fmt e, to_raw_fmt f]
-| (lam n bi e t) := p ["lam", to_fmt n, repr bi, to_raw_fmt e, to_raw_fmt t]
-| (pi n bi e t) := p ["pi", to_fmt n, repr bi, to_raw_fmt e, to_raw_fmt t]
-| (elet n g e f) := p ["elet", to_fmt n, to_raw_fmt g, to_raw_fmt e, to_raw_fmt f]
-| (macro d args) := sbracket (format.join (list.intersperse " " ("macro" :: to_fmt (macro_def_name d) :: args.map to_raw_fmt)))
+meta def to_raw_fmt : expr elab → γ
+| (var n) := p [↑"var", to_fmt n]
+| (sort l) := p [↑"sort", to_fmt l]
+| (const n ls) := p [↑"const", to_fmt n, to_fmt ls]
+| (mvar n m t)   := p [↑"mvar", to_fmt n, to_fmt m, to_raw_fmt t]
+| (local_const n m bi t) := p [↑"local_const", to_fmt n, to_fmt m, to_raw_fmt t]
+| (app e f) := p [↑"app", to_raw_fmt e, to_raw_fmt f]
+| (lam n bi e t) := p [↑"lam", to_fmt n, ↑(repr bi), to_raw_fmt e, to_raw_fmt t]
+| (pi n bi e t) := p [↑"pi", to_fmt n, ↑(repr bi), to_raw_fmt e, to_raw_fmt t]
+| (elet n g e f) := p [↑"elet", to_fmt n, to_raw_fmt g, to_raw_fmt e, to_raw_fmt f]
+| (macro d args) := sbracket (join (list.intersperse ↑" " (↑"macro" :: to_fmt (macro_def_name d) :: args.map to_raw_fmt)))
 
 meta def mfold {α : Type} {m : Type → Type} [monad m] (e : expr) (a : α) (fn : expr → nat → α → m α) : m α :=
 fold e (return a) (λ e n a, a >>= fn e n)

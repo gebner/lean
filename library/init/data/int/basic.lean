@@ -31,8 +31,8 @@ protected def int.repr : int → string
 instance : has_repr int :=
 ⟨int.repr⟩
 
-instance : has_to_string int :=
-⟨int.repr⟩
+instance {γ} [formattable γ] : has_to_fmt γ int :=
+⟨λ i, to_fmt i.repr⟩
 
 namespace int
 

@@ -6,6 +6,7 @@ Author: Leonardo de Moura
 prelude
 import init.data.string.basic init.data.bool.basic init.data.subtype.basic
 import init.data.unsigned.basic init.data.prod init.data.sum.basic init.data.nat.div
+import init.data.formattable
 open sum subtype nat
 
 universes u v
@@ -52,44 +53,6 @@ instance {α : Type u} {β : α → Type v} [has_repr α] [s : ∀ x, has_repr (
 
 instance {α : Type u} {p : α → Prop} [has_repr α] : has_repr (subtype p) :=
 ⟨λ s, repr (val s)⟩
-
-namespace nat
-
-def digit_char (n : ℕ) : char :=
-if n = 0 then '0' else
-if n = 1 then '1' else
-if n = 2 then '2' else
-if n = 3 then '3' else
-if n = 4 then '4' else
-if n = 5 then '5' else
-if n = 6 then '6' else
-if n = 7 then '7' else
-if n = 8 then '8' else
-if n = 9 then '9' else
-if n = 0xa then 'a' else
-if n = 0xb then 'b' else
-if n = 0xc then 'c' else
-if n = 0xd then 'd' else
-if n = 0xe then 'e' else
-if n = 0xf then 'f' else
-'*'
-
-def digit_succ (base : ℕ) : list ℕ → list ℕ
-| [] := [1]
-| (d::ds) :=
-    if d+1 = base then
-        0 :: digit_succ ds
-    else
-        (d+1) :: ds
-
-def to_digits (base : ℕ) : ℕ → list ℕ
-| 0 := [0]
-| (n+1) := digit_succ base (to_digits n)
-
-protected def repr (n : ℕ) : string :=
-((to_digits 10 n).map digit_char).reverse.as_string
-
-end nat
 
 instance : has_repr nat :=
 ⟨nat.repr⟩

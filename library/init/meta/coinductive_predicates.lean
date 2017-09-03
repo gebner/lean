@@ -337,7 +337,7 @@ meta def add_coinductive_predicate
     (ls, t) ← mk_local_pis c.local_type,
     (is_def_eq t `(Prop) <|>
       fail (format! "Type of {c.local_pp_name} is not Prop. Currently only " ++
-                    "coinductive predicates are supported.")),
+                    ↑"coinductive predicates are supported.")),
     let n := if preds.length = 1 then "" else "_" ++ c.local_pp_name.last_string,
     f₁ ← mk_local_def (mk_simple_name $ "C" ++ n) c.local_type,
     f₂ ← mk_local_def (mk_simple_name $ "C₂" ++ n) c.local_type,

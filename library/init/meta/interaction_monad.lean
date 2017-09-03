@@ -18,15 +18,16 @@ meta inductive interaction_monad.result (state : Type) (α : Type u)
 open interaction_monad.result
 
 section
+variables {γ : Type v} [formattable γ]
 variables {state : Type} {α : Type u}
-variables [has_to_string α]
+variables [has_to_fmt γ α]
 
-meta def interaction_monad.result_to_string : result state α → string
-| (success a s)              := to_string a
-| (exception (some t) ref s) := "Exception: " ++ to_string (t ())
-| (exception none ref s)     := "[silent exception]"
+meta def interaction_monad.result_to_string : result state α → γ
+| (success a s)              := to_fmt a
+| (exception (some t) ref s) := ↑"Exception: " ++ to_fmt (t ())
+| (exception none ref s)     := ↑"[silent exception]"
 
-meta instance interaction_monad.result_has_string : has_to_string (result state α) :=
+meta instance interaction_monad.result_has_string : has_to_fmt γ (result state α) :=
 ⟨interaction_monad.result_to_string⟩
 end
 
@@ -73,10 +74,10 @@ meta instance interaction_monad.monad : monad m :=
  id_map := undefined, pure_bind := undefined, bind_assoc := undefined,
  bind_pure_comp_eq_map := undefined, bind_map_eq_seq := undefined}
 
-meta def interaction_monad.mk_exception {α : Type u} {β : Type v} [has_to_format β] (msg : β) (ref : option expr) (s : state) : result state α :=
+meta def interaction_monad.mk_exception {α : Type u} {β : Type v} [has_to_fmt format β] (msg : β) (ref : option expr) (s : state) : result state α :=
 exception (some (λ _, to_fmt msg)) none s
 
-meta def interaction_monad.fail {α : Type u} {β : Type v} [has_to_format β] (msg : β) : m α :=
+meta def interaction_monad.fail {α : Type u} {β : Type v} [has_to_fmt format β] (msg : β) : m α :=
 λ s, interaction_monad.mk_exception msg none s
 
 meta def interaction_monad.silent_fail {α : Type u} : m α :=
@@ -95,7 +96,7 @@ meta def interaction_monad.orelse' {α : Type u} (t₁ t₂ : m α) (use_first_e
      (λ e₂ ref₂ s₂', if use_first_ex then (exception e₁ ref₁ s₁') else (exception e₂ ref₂ s₂')))
 
 meta instance interaction_monad.monad_fail : monad_fail m :=
-{ interaction_monad.monad with fail := λ α s, interaction_monad.fail (to_fmt s) }
+{ interaction_monad.monad with fail := λ α s, interaction_monad.fail s }
 
 -- TODO: unify `parser` and `tactic` behavior?
 -- meta instance interaction_monad.alternative : alternative m :=

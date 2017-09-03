@@ -126,7 +126,7 @@ meta constant eof                  : vm bool
 /-- Return the list of declarations tagged with the given attribute. -/
 meta constant get_attribute        : name → vm (list name)
 
-meta def trace {α : Type} [has_to_format α] (a : α) : vm unit :=
+meta def trace {α : Type} [has_to_fmt format α] (a : α) : vm unit :=
 do fmt ← return $ to_fmt a,
    return $ _root_.trace_fmt fmt (λ u, ())
 

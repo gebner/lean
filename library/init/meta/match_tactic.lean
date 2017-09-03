@@ -5,6 +5,7 @@ Authors: Leonardo de Moura
 -/
 prelude
 import init.meta.interactive_base init.function
+universes u
 
 namespace tactic
 meta structure pattern :=
@@ -105,13 +106,7 @@ do ctx ← local_context,
    new_p ← pexpr_to_pattern p,
    match_hypothesis_core new_p ctx
 
-meta instance : has_to_tactic_format pattern :=
-⟨λp, do
-  t ← pp p.target,
-  mo ← pp p.moutput,
-  uo ← pp p.uoutput,
-  u ← pp p.nuvars,
-  m ← pp p.nmvars,
-  return format!"pattern.mk ({t}) {uo} {mo} {u} {m}" ⟩
+meta instance {γ : Type u} [formattable γ] [has_to_fmt γ expr] [has_to_fmt γ level] : has_to_fmt γ pattern :=
+⟨λ p, formattable!"pattern.mk ({p.target}) {p.uoutput} {p.moutput} {p.nuvars} {p.nmvars}"⟩
 
 end tactic

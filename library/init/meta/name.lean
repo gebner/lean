@@ -5,6 +5,7 @@ Authors: Leonardo de Moura
 -/
 prelude
 import init.data.ordering init.coe init.data.to_string
+universe u
 
 /-- Reflect a C++ name object. The VM replaces it with the C++ implementation. -/
 inductive name
@@ -16,7 +17,7 @@ inductive name
     the tactic declaration names tac_name to synthesize the argument.
     Like opt_param, this gadget only affects elaboration.
     For example, the tactic will *not* be invoked during type class resolution. -/
-@[reducible] def {u} auto_param (α : Sort u) (tac_name : name) : Sort u :=
+@[reducible] def auto_param (α : Sort u) (tac_name : name) : Sort u :=
 α
 
 instance : inhabited name :=
@@ -66,8 +67,8 @@ def name.components (n : name) : list name :=
 protected def name.to_string : name → string :=
 name.to_string_with_sep "."
 
-instance : has_to_string name :=
-⟨name.to_string⟩
+instance {γ : Type u} [formattable γ] : has_to_fmt γ name :=
+⟨λ n, to_fmt n.to_string⟩
 
 /- TODO(Leo): provide a definition in Lean. -/
 meta constant name.has_decidable_eq : decidable_eq name

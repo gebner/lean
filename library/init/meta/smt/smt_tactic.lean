@@ -80,7 +80,7 @@ meta def smt_tactic_orelse {α : Type} (t₁ t₂ : smt_tactic α) : smt_tactic 
      result.exception)
 
 meta instance : monad_fail smt_tactic :=
-{ smt_tactic.monad with fail := λ α s, (tactic.fail (to_fmt s) : smt_tactic α) }
+{ smt_tactic.monad with fail := λ α s, (tactic.fail s : smt_tactic α) }
 
 meta instance : alternative smt_tactic :=
 { smt_tactic.monad with
@@ -147,7 +147,7 @@ ematch_core (λ _, tt)
 meta def failed {α} : smt_tactic α :=
 tactic.failed
 
-meta def fail {α : Type} {β : Type u} [has_to_format β] (msg : β) : smt_tactic α :=
+meta def fail {α : Type} {β : Type u} [has_to_fmt tactic_format β] (msg : β) : smt_tactic α :=
 tactic.fail msg
 
 meta def try {α : Type} (t : smt_tactic α) : smt_tactic unit :=
@@ -211,7 +211,7 @@ meta def trace_state : smt_tactic unit :=
 do (s₁, s₂) ← smt_tactic.read,
    trace (smt_state.to_format s₁ s₂)
 
-meta def trace {α : Type} [has_to_tactic_format α] (a : α) : smt_tactic unit :=
+meta def trace {α : Type} [has_to_fmt tactic_format α] (a : α) : smt_tactic unit :=
 tactic.trace a
 
 meta def to_expr (q : pexpr) (allow_mvars := tt) : smt_tactic expr :=

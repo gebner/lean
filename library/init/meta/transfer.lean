@@ -43,12 +43,10 @@ private meta structure rel_data :=
 (out_type : expr)
 (relation : expr)
 
-meta instance has_to_tactic_format_rel_data : has_to_tactic_format rel_data :=
-⟨λr, do
-  R ← pp r.relation,
-  α ← pp r.in_type,
-  β ← pp r.out_type,
-  return format!"({R}: rel ({α}) ({β}))" ⟩
+variables {γ : Type} [formattable γ] [has_to_fmt γ expr]
+
+meta instance rel_data.has_to_fmt : has_to_fmt γ rel_data :=
+⟨λ r, formattable!"({r.relation}: rel ({r.in_type}) ({r.out_type}))"⟩
 
 private meta structure rule_data :=
 (pr      : expr)
@@ -59,16 +57,8 @@ private meta structure rule_data :=
 (pat     : pattern)                -- `R c`
 (out     : expr)                   -- right-hand side `d` of rel equation `R c d`
 
-meta instance has_to_tactic_format_rule_data : has_to_tactic_format rule_data :=
-⟨λr, do
-  pr ← pp r.pr,
-  up ← pp r.uparams,
-  mp ← pp r.params,
-  ua ← pp r.uargs,
-  ma ← pp r.args,
-  pat ← pp r.pat.target,
-  out ← pp r.out,
-  return format!"{{ ⟨{pat}⟩ pr: {pr} → {out}, {up} {mp} {ua} {ma} }" ⟩
+meta instance rule_data.has_to_fmt : has_to_fmt γ rule_data :=
+⟨λ r, formattable!"{{ ⟨{r.pat.target}⟩ pr: {r.pr} → {r.out}, {r.uparams} {r.params} {r.uargs} {r.args} }"⟩
 
 private meta def get_lift_fun : expr → tactic (list rel_data × expr)
 | e :=

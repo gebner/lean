@@ -81,7 +81,7 @@ end types
 
 precedence only:0
 
-open expr format tactic types
+open expr formattable tactic types
 private meta def maybe_paren : list format → format
 | []  := ""
 | [f] := f
@@ -201,35 +201,35 @@ open interaction_monad
 open interactive
 
 private meta def parse_format : string → list char → parser pexpr
-| acc []            := pure ``(to_fmt %%(reflect acc))
+| acc []            := pure ``(formattable.of_string %%(reflect acc))
 | acc ('\n'::s)     :=
 do f ← parse_format "" s,
-   pure ``(to_fmt %%(reflect acc) ++ format.line ++ %%f)
+   pure ``(formattable.of_string %%(reflect acc) ++ formattable.line ++ %%f)
 | acc ('{'::'{'::s) := parse_format (acc ++ "{") s
 | acc ('{'::s) :=
 do (e, s) ← with_input (lean.parser.pexpr 0) s.as_string,
    '}'::s ← return s.to_list | fail "'}' expected",
    f ← parse_format "" s,
-   pure ``(to_fmt %%(reflect acc) ++ to_fmt %%e ++ %%f)
+   pure ``(formattable.of_string %%(reflect acc) ++ to_fmt %%e ++ %%f)
 | acc (c::s) := parse_format (acc.str c) s
+
+reserve prefix `formattable! `:100
+@[user_notation]
+meta def formattable_macro (_ : parse $ tk "formattable!") (s : string) : parser pexpr :=
+parse_format "" s.to_list
 
 reserve prefix `format! `:100
 @[user_notation]
 meta def format_macro (_ : parse $ tk "format!") (s : string) : parser pexpr :=
-parse_format "" s.to_list
+do f ← parse_format "" s.to_list, return ``(%%f : format)
 
-private meta def parse_sformat : string → list char → parser pexpr
-| acc []            := pure $ pexpr.of_expr (reflect acc)
-| acc ('{'::'{'::s) := parse_sformat (acc ++ "{") s
-| acc ('{'::s) :=
-do (e, s) ← with_input (lean.parser.pexpr 0) s.as_string,
-   '}'::s ← return s.to_list | fail "'}' expected",
-   f ← parse_sformat "" s,
-   pure ``(%%(reflect acc) ++ to_string %%e ++ %%f)
-| acc (c::s) := parse_sformat (acc.str c) s
+reserve prefix `tformat! `:100
+@[user_notation]
+meta def tformat_macro (_ : parse $ tk "tformat!") (s : string) : parser pexpr :=
+do f ← parse_format "" s.to_list, return ``(%%f : tactic_format)
 
 reserve prefix `sformat! `:100
 @[user_notation]
 meta def sformat_macro (_ : parse $ tk "sformat!") (s : string) : parser pexpr :=
-parse_sformat "" s.to_list
+do f ← parse_format "" s.to_list, return ``(%%f : string)
 end macros

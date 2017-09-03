@@ -636,7 +636,7 @@ tactic.trace_state
 /--
 `trace a` displays `a` in the tracing buffer.
 -/
-meta def trace {α : Type} [has_to_tactic_format α] (a : α) : tactic unit :=
+meta def trace {α : Type} [has_to_fmt tactic_format α] (a : α) : tactic unit :=
 tactic.trace a
 
 meta def existsi : parse pexpr_list_or_texpr → tactic unit
@@ -748,8 +748,8 @@ private meta def check_no_overload (p : pexpr) : tactic unit :=
 when p.is_choice_macro $
   match p with
   | macro _ ps :=
-    fail $ to_fmt "ambiguous overload, possible interpretations" ++
-           format.join (ps.map (λ p, (to_fmt p).indent 4))
+    fail $ "ambiguous overload, possible interpretations" ++
+           formattable.join (ps.map (λ p, formattable.indent (to_fmt p) 4))
   | _ := failed
   end
 

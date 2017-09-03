@@ -5,6 +5,7 @@ Authors: Leonardo de Moura
 -/
 prelude
 import init.category.monad init.meta.format init.util
+universes w
 /-
 Remark: we use a function that produces a format object as the exception information.
 Motivation: the formatting object may be big, and we may create it on demand.
@@ -15,15 +16,15 @@ meta inductive exceptional (α : Type)
 
 section
 open exceptional
-variables {α : Type}
-variables [has_to_string α]
+variables {γ : Type w} [formattable γ]
+variables {α : Type} [has_to_fmt γ α]
 
-protected meta def exceptional.to_string : exceptional α → string
-| (success a)       := to_string a
-| (exception .(α) e) := "Exception: " ++ to_string (e options.mk)
+protected meta def exceptional.to_fmt : exceptional α → γ
+| (success a)     := to_fmt a
+| (exception _ e) := ↑"Exception: " ++ to_fmt (e options.mk)
 
-meta instance : has_to_string (exceptional α) :=
-has_to_string.mk exceptional.to_string
+meta instance : has_to_fmt γ (exceptional α) :=
+⟨exceptional.to_fmt⟩
 end
 
 namespace exceptional

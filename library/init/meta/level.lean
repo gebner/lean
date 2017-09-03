@@ -6,6 +6,8 @@ Authors: Leonardo de Moura
 prelude
 import init.meta.name init.meta.format
 
+universes u
+
 /-- Reflect a C++ level object. The VM replaces it with the C++ implementation. -/
 meta inductive level
 | zero   : level
@@ -41,10 +43,10 @@ if level.lt a b then ordering.lt
 else if a = b then ordering.eq
 else ordering.gt
 
-meta instance : has_to_string level :=
-⟨level.to_string⟩
+meta instance (γ : Type u) [formattable γ] : has_to_fmt γ level :=
+⟨λ l, ↑l.to_string⟩
 
-meta instance : has_to_format level :=
+meta instance level.has_to_fmt_format : has_to_fmt format level :=
 ⟨λ l, level.to_format l options.mk⟩
 
 meta instance : has_ordering level :=

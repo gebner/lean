@@ -15,7 +15,7 @@ structure param_info :=
 
 open format list decidable
 
-private meta def ppfield {α : Type} [has_to_format α] (fname : string) (v : α) : format :=
+private meta def ppfield {α : Type} [has_to_fmt format α] (fname : string) (v : α) : format :=
 group $ to_fmt fname ++ space ++ to_fmt ":=" ++ space ++ nest (fname.utf8_length + 4) (to_fmt v)
 
 private meta def concat_fields (f₁ f₂ : format) : format :=
@@ -27,15 +27,15 @@ local infix `+++`:65 := concat_fields
 
 meta def param_info.to_format : param_info → format
 | (param_info.mk i ii p d ds) :=
-group ∘ cbrace $
+group ∘ formattable.cbrace $
   when i  "implicit" +++
   when ii "inst_implicit" +++
   when p  "prop" +++
   when d  "has_fwd_deps" +++
-  when (length ds > 0) (to_fmt "back_deps := " ++ to_fmt ds)
+  when (length ds > 0) (to_fmt "back_deps := " ++ to_fmt ds : format)
 
-meta instance : has_to_format param_info :=
-has_to_format.mk param_info.to_format
+meta instance : has_to_fmt format param_info :=
+⟨param_info.to_format⟩
 
 structure fun_info :=
 (params      : list param_info)
@@ -43,12 +43,12 @@ structure fun_info :=
 
 meta def fun_info_to_format : fun_info → format
 | (fun_info.mk ps ds) :=
-group ∘ dcbrace $
+group ∘ formattable.dcbrace $
   ppfield "params" ps +++
   ppfield "result_deps" ds
 
-meta instance : has_to_format fun_info :=
-has_to_format.mk fun_info_to_format
+meta instance : has_to_fmt format fun_info :=
+⟨fun_info_to_format⟩
 
 /--
   specialized is true if the result of fun_info has been specifialized
@@ -78,12 +78,12 @@ structure subsingleton_info :=
 
 meta def subsingleton_info_to_format : subsingleton_info → format
 | (subsingleton_info.mk s ss) :=
-group ∘ cbrace $
+group ∘ formattable.cbrace $
   when s  "specialized" +++
   when ss "subsingleton"
 
-meta instance : has_to_format subsingleton_info :=
-has_to_format.mk subsingleton_info_to_format
+meta instance : has_to_fmt format subsingleton_info :=
+⟨subsingleton_info_to_format⟩
 
 namespace tactic
 

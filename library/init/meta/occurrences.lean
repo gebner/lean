@@ -7,6 +7,7 @@ prelude
 import init.logic init.data.repr init.meta.format
 import init.meta.contradiction_tactic init.meta.constructor_tactic
 import init.meta.relation_tactics init.meta.injection_tactic
+universe u
 
 /--  We can specify the scope of application of some tactics using
    the following type.
@@ -41,12 +42,14 @@ def occurrences_repr : occurrences → string
 instance : has_repr occurrences :=
 ⟨occurrences_repr⟩
 
-meta def occurrences_to_format : occurrences → format
+variables {γ : Type u} [formattable γ]
+
+def occurrences_to_format : occurrences → γ
 | occurrences.all     := to_fmt "*"
 | (occurrences.pos l) := to_fmt l
 | (occurrences.neg l) := to_fmt "-" ++ to_fmt l
 
-meta instance : has_to_format occurrences :=
+instance : has_to_fmt γ occurrences :=
 ⟨occurrences_to_format⟩
 
 open decidable tactic

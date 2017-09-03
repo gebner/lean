@@ -37,10 +37,10 @@ private meta def mk_constructor
   (arity : nat)
   (fs : list name) : format :=
   "lean::mk_vm_constructor(" ++ to_fmt arity ++ "," ++
-  (format.bracket "{" "}" (comma_sep $ mk_constructor_args fs)) ++ ")"
+  (formattable.bracket "{" "}" (comma_sep $ mk_constructor_args fs)) ++ ")"
 
 private meta def mk_call (symbol : name) (args : list name) : format :=
-  mangle_name symbol ++ (format.bracket "(" ")" (comma_sep $ list.map mangle_name args))
+  mangle_name symbol ++ (formattable.bracket "(" ")" (comma_sep $ list.map mangle_name args))
 
 meta def literal : ir.literal → format
 | (ir.literal.nat n) := to_fmt "lean::mk_vm_nat(" ++ to_fmt n ++ ")"
@@ -49,10 +49,10 @@ meta def format_local (n : name) : format :=
   to_fmt (name.to_string_with_sep "_" n)
 
 meta def string_lit (s : string) : format :=
-  format.bracket "\"" "\"" (to_fmt s)
+  formattable.bracket "\"" "\"" (to_fmt s)
 
 meta def block (body : format) : format :=
-format.bracket "{" "}" (format.nest 4 (format.line ++ body) ++ format.line)
+formattable.bracket "{" "}" (format.nest 4 (format.line ++ body) ++ format.line)
 
 meta def expr' (action : ir.stmt → format) : ir.expr → format
 | (ir.expr.call f xs) := mk_call f xs
@@ -77,7 +77,7 @@ meta def expr' (action : ir.stmt → format) : ir.expr → format
   to_fmt "throw std::runtime_error(" ++ string_lit err_msg ++ ");"
 | (ir.expr.mk_native_closure n args) :=
 "lean::mk_native_closure(*g_env, lean::name({\"" ++ name.to_string_with_sep "\", \"" n ++ "\"})" ++ "," ++
-   format.bracket "{" "}" (comma_sep (list.map format_local args)) ++ ")"
+   formattable.bracket "{" "}" (comma_sep (list.map format_local args)) ++ ")"
  | (ir.expr.invoke n args) :=
  "lean::invoke(" ++ name.to_string_with_sep "_" n ++ ", " ++
  (comma_sep (list.map format_local args)) ++ ")"
@@ -105,12 +105,12 @@ meta def ty : ir.ty → format
 | (ir.ty.ref T) := ty T ++ format.of_string " const & "
 | (ir.ty.mut_ref T) := ty T ++ format.of_string " &"
 | (ir.ty.tag _ _) := format.of_string "an_error"
-| (ir.ty.int) := "int "
-| (ir.ty.object_buffer) := "lean::buffer<lean::vm_obj> "
+| (ir.ty.int) := ↑"int "
+| (ir.ty.object_buffer) := ↑"lean::buffer<lean::vm_obj> "
 | (ir.ty.name n) := to_fmt n ++ format.space
 
 meta def parens (inner : format) : format :=
-  format.bracket "(" ")" inner
+  formattable.bracket "(" ")" inner
 
 meta def stmt : ir.stmt → format
 | (ir.stmt.e e) := expr' stmt e ++ ";"
@@ -152,7 +152,7 @@ format.space ++
 to_fmt (name.to_string_with_sep "_" (mk_str_name "_$local$_" (name.to_string_with_sep "_" (prod.fst param))))
 
 meta def format_argument_list (tys : list (name × ir.ty)) : format :=
-  format.bracket "(" ")" (comma_sep (list.map format_param tys))
+  formattable.bracket "(" ")" (comma_sep (list.map format_param tys))
 
 -- meta_def format_prototypes ()
 meta def defn (d : ir.defn) : format :=
@@ -161,7 +161,7 @@ meta def defn (d : ir.defn) : format :=
     let body := stmt body in
     (ty ret_ty) ++ format.space ++ (mangle_name n) ++
     (format_argument_list arg_tys) ++ format.space ++
-    (format.bracket "{" "}" $ format.nest 4 (format.line ++ body) ++ format.line)
+    (formattable.bracket "{" "}" $ format.nest 4 (format.line ++ body) ++ format.line)
   end
 
 end format_cpp

@@ -32,20 +32,37 @@ meta constant get_options : tactic_state → options
 meta constant set_options : tactic_state → options → tactic_state
 end tactic_state
 
-meta instance : has_to_format tactic_state :=
-⟨tactic_state.to_format⟩
+meta instance {γ : Type u} [formattable γ] : has_to_fmt γ tactic_state :=
+⟨λ s, to_fmt $ s.to_format.to_string s.get_options⟩
 
-meta instance : has_to_string tactic_state :=
-⟨λ s, (to_fmt s).to_string s.get_options⟩
+meta instance has_to_fmt_format : has_to_fmt format tactic_state :=
+⟨λ s, s.to_format⟩
 
 @[reducible] meta def tactic := interaction_monad tactic_state
 @[reducible] meta def tactic_result := interaction_monad.result tactic_state
 
+meta def tactic_format := tactic format
+
+protected meta def tactic_format.to_format (f : tactic_format) : tactic format := f
+
+meta instance : formattable tactic_format := {
+  append := (λ a b, do a' ← a.to_format, b' ← b, return (a' ++ b')),
+  of_string' := λ s, (return s : tactic format),
+  of_nat' := λ n, (return (format.of_nat n) : tactic format),
+  line' := (return format.line : tactic format),
+  nest := (λ i a, do a' ← a.to_format, return (formattable.nest i a')),
+  group := (λ a, do a' ← a.to_format, return (formattable.group a')),
+}
+
+@[priority 10]
+meta instance tactic_format.has_to_fmt_of_format {α : Type u} [has_to_fmt format α] : has_to_fmt tactic_format α :=
+⟨λ a, (return (to_fmt a) : tactic format)⟩
+
 namespace tactic
   export interaction_monad (hiding failed fail)
   meta def failed {α : Type} : tactic α := interaction_monad.failed
-  meta def fail {α : Type u} {β : Type v} [has_to_format β] (msg : β) : tactic α :=
-  interaction_monad.fail msg
+  meta def fail {α : Type u} {β : Type v} [has_to_fmt tactic_format β] (msg : β) : tactic α :=
+  interaction_monad_bind (tactic_format.to_format (to_fmt msg)) interaction_monad.fail
 end tactic
 
 namespace tactic_result
@@ -182,36 +199,11 @@ end tactic
 meta def tactic_format_expr (e : expr) : tactic format :=
 do s ← tactic.read, return (tactic_state.format_expr s e)
 
-meta class has_to_tactic_format (α : Type u) :=
-(to_tactic_format : α → tactic format)
-
-meta instance : has_to_tactic_format expr :=
+meta instance tactic_format.has_to_fmt_expr : has_to_fmt tactic_format expr :=
 ⟨tactic_format_expr⟩
 
-meta def tactic.pp {α : Type u} [has_to_tactic_format α] : α → tactic format :=
-has_to_tactic_format.to_tactic_format
-
-open tactic format
-
-meta instance {α : Type u} [has_to_tactic_format α] : has_to_tactic_format (list α) :=
-⟨has_map.map to_fmt ∘ monad.mapm pp⟩
-
-meta instance (α : Type u) (β : Type v) [has_to_tactic_format α] [has_to_tactic_format β] :
- has_to_tactic_format (α × β) :=
-⟨λ ⟨a, b⟩, to_fmt <$> (prod.mk <$> pp a <*> pp b)⟩
-
-meta def option_to_tactic_format {α : Type u} [has_to_tactic_format α] : option α → tactic format
-| (some a) := do fa ← pp a, return (to_fmt "(some " ++ fa ++ ")")
-| none     := return "none"
-
-meta instance {α : Type u} [has_to_tactic_format α] : has_to_tactic_format (option α) :=
-⟨option_to_tactic_format⟩
-
-meta instance {α} (a : α) : has_to_tactic_format (reflected a) :=
-⟨λ h, pp h.to_expr⟩
-
-@[priority 10] meta instance has_to_format_to_has_to_tactic_format (α : Type) [has_to_format α] : has_to_tactic_format α :=
-⟨(λ x, return x) ∘ to_fmt⟩
+meta def tactic.pp {α : Type u} [has_to_fmt tactic_format α] (a : α) : tactic format :=
+(to_fmt a : tactic_format).to_format
 
 namespace tactic
 open tactic_state
@@ -224,7 +216,7 @@ meta def get_decl (n : name) : tactic declaration :=
 do s ← read,
    (env s).get n
 
-meta def trace {α : Type u} [has_to_tactic_format α] (a : α) : tactic unit :=
+meta def trace {α : Type u} [has_to_fmt tactic_format α] (a : α) : tactic unit :=
 do fmt ← pp a,
    return $ _root_.trace_fmt fmt (λ u, ())
 
@@ -235,8 +227,7 @@ meta def timetac {α : Type u} (desc : string) (t : thunk (tactic α)) : tactic 
 λ s, timeit desc (t () s)
 
 meta def trace_state : tactic unit :=
-do s ← read,
-   trace $ to_fmt s
+do s ← read, trace s
 
 inductive transparency
 | all | semireducible | instances | reducible | none

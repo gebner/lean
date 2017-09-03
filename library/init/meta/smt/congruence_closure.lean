@@ -56,7 +56,7 @@ cc_state.mk_using_hs_core {}
 meta def roots (s : cc_state) : list expr :=
 cc_state.roots_core s tt
 
-meta instance : has_to_tactic_format cc_state :=
+meta instance : has_to_fmt tactic_format cc_state :=
 ⟨λ s, cc_state.pp_core s tt⟩
 
 meta def eqc_of_core (s : cc_state) : expr → expr → list expr → list expr
@@ -102,8 +102,7 @@ do intros, s ← cc_state.mk_using_hs_core cfg, t ← target, s ← s.internaliz
      } else do {
        dbg ← get_bool_option `trace.cc.failure ff,
        if dbg then do {
-         ccf ← pp s,
-         fail format!"cc tactic failed, equivalence classes: \n{ccf}"
+         fail tformat!"cc tactic failed, equivalence classes: \n{s}"
        } else do {
          fail "cc tactic failed"
        }

@@ -128,10 +128,10 @@ interface.term.get_line
 def cmdline_args : io (list string) :=
 return interface.term.cmdline_args
 
-def print {α} [has_to_string α] (s : α) : io unit :=
+def print {α} [has_to_fmt string α] (s : α) : io unit :=
 put_str ∘ to_string $ s
 
-def print_ln {α} [has_to_string α] (s : α) : io unit :=
+def print_ln {α} [has_to_fmt string α] (s : α) : io unit :=
 print s >> put_str "\n"
 
 def handle : Type :=
@@ -220,10 +220,10 @@ meta constant format.print_using : format → options → io unit
 meta definition format.print (fmt : format) : io unit :=
 format.print_using fmt options.mk
 
-meta definition pp_using {α : Type} [has_to_format α] (a : α) (o : options) : io unit :=
+meta definition pp_using {α : Type} [has_to_fmt format α] (a : α) (o : options) : io unit :=
 format.print_using (to_fmt a) o
 
-meta definition pp {α : Type} [has_to_format α] (a : α) : io unit :=
+meta definition pp {α : Type} [has_to_fmt format α] (a : α) : io unit :=
 format.print (to_fmt a)
 
 /-- Run the external process specified by `args`.

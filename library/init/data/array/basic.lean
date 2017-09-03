@@ -121,10 +121,7 @@ theorem read_mem (a : array α n) (i) : read a i ∈ a := exists.intro i rfl
 instance [has_repr α] : has_repr (array α n) :=
 ⟨repr ∘ to_list⟩
 
-meta instance [has_to_format α] : has_to_format (array α n) :=
+instance {γ : Type w} [formattable γ] [has_to_fmt γ α] : has_to_fmt γ (array α n) :=
 ⟨to_fmt ∘ to_list⟩
-
-meta instance [has_to_tactic_format α] : has_to_tactic_format (array α n) :=
-⟨tactic.pp ∘ to_list⟩
 
 end array

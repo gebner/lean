@@ -20,7 +20,7 @@ match pp_state_core s with
 | result.exception _ _ _ := "failed to pretty print"
 end
 
-meta instance i2 : has_to_format tactic_state :=
+meta instance i2 : has_to_fmt format tactic_state :=
 ⟨λ s, to_fmt "My custom goal visualizer" ++ format.line ++ pp_state s⟩
 
 example {α : Type u} {n : nat} (v : Vec α n) : f v ≠ 2 :=

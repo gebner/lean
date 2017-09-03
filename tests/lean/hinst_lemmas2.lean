@@ -20,4 +20,4 @@ attribute [attr2] gax4
 attribute [attr_main] gax5
 attribute [sattr1] gax6
 
-run_cmd get_hinst_lemmas_for_attr `attr_main >>= hinst_lemmas.pp >>= tactic.trace
+run_cmd do get_hinst_lemmas_for_attr `attr_main >>= tactic.trace

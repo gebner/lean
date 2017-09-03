@@ -81,23 +81,15 @@ name_map.mk data
 
 open rb_map prod
 section
-open format
-variables {key : Type} {data : Type} [has_to_format key] [has_to_format data]
-private meta def format_key_data (k : key) (d : data) (first : bool) : format :=
-(if first then to_fmt "" else to_fmt "," ++ line) ++ to_fmt k ++ space ++ to_fmt "←" ++ space ++ to_fmt d
+open formattable
+variables {γ : Type} [formattable γ]
+variables {key : Type} {data : Type} [has_to_fmt γ key] [has_to_fmt γ data]
+private meta def format_key_data (k : key) (d : data) (first : bool) : γ :=
+(if first then ↑"" else ↑"," ++ line) ++ to_fmt k ++ ↑" ← " ++ to_fmt d
 
-meta instance : has_to_format (rb_map key data) :=
-⟨λ m, group $ to_fmt "⟨" ++ nest 1 (fst (fold m (to_fmt "", tt) (λ k d p, (fst p ++ format_key_data k d (snd p), ff)))) ++
-              to_fmt "⟩"⟩
-end
-
-section
-variables {key : Type} {data : Type} [has_to_string key] [has_to_string data]
-private meta def key_data_to_string (k : key) (d : data) (first : bool) : string :=
-(if first then "" else ", ") ++ to_string k ++ " ← " ++ to_string d
-
-meta instance : has_to_string (rb_map key data) :=
-⟨λ m, "⟨" ++ (fst (fold m ("", tt) (λ k d p, (fst p ++ key_data_to_string k d (snd p), ff)))) ++ "⟩"⟩
+meta instance : has_to_fmt γ (rb_map key data) :=
+⟨λ m, group $ ↑"⟨" ++ nest 1 (fst (fold m ((↑"" : γ), tt) (λ k d p, (fst p ++ format_key_data k d (snd p), ff)))) ++
+              ↑"⟩"⟩
 end
 
 /-- a variant of rb_maps that stores a list of elements for each key.
@@ -135,10 +127,11 @@ meta def rb_set (key) := rb_map key unit
 meta def mk_rb_set {key} [has_ordering key] : rb_set key :=
 mk_rb_map
 
-open format
+variables {γ : Type} [formattable γ]
+open formattable
 
-private meta def format_key {key} [has_to_format key] (k : key) (first : bool) : format :=
-(if first then to_fmt "" else to_fmt "," ++ line) ++ to_fmt k
+private meta def format_key {key} [has_to_fmt γ key] (k : key) (first : bool) : γ :=
+(if first then ↑"" else ↑"," ++ line) ++ to_fmt k
 
 namespace rb_set
 meta def insert {key} (s : rb_set key) (k : key) : rb_set key :=
@@ -165,9 +158,9 @@ s.fold (return a) (λ k act, act >>= fn k)
 meta def to_list {key : Type} (s : rb_set key) : list key :=
 s.fold [] list.cons
 
-meta instance {key} [has_to_format key] : has_to_format (rb_set key) :=
-⟨λ m, group $ to_fmt "{" ++ nest 1 (fst (fold m (to_fmt "", tt) (λ k p, (fst p ++ format_key k (snd p), ff)))) ++
-              to_fmt "}"⟩
+meta instance {key} [has_to_fmt γ key] : has_to_fmt γ (rb_set key) :=
+⟨λ m, group $ ↑"{" ++ nest 1 (fst (fold m ((↑"" : γ), tt) (λ k p, (fst p ++ format_key k (snd p), ff)))) ++
+              ↑"}"⟩
 end rb_set
 
 meta constant name_set : Type
@@ -184,9 +177,9 @@ meta constant fold {α :Type} : name_set → α → (name → α → α) → α
 meta def to_list (s : name_set) : list name :=
 s.fold [] list.cons
 
-meta instance : has_to_format name_set :=
-⟨λ m, group $ to_fmt "{" ++ nest 1 (fst (fold m (to_fmt "", tt) (λ k p, (fst p ++ format_key k (snd p), ff)))) ++
-              to_fmt "}"⟩
+meta instance : has_to_fmt γ name_set :=
+⟨λ m, group $ ↑"{" ++ nest 1 (fst (fold m ((↑"" : γ), tt) (λ k p, (fst p ++ format_key k (snd p), ff)))) ++
+              ↑"}"⟩
 
 meta def of_list (l : list name) : name_set :=
 list.foldl name_set.insert mk_name_set l
