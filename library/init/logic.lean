@@ -739,6 +739,7 @@ def is_dec_eq {α : Sort u} (p : α → α → bool) : Prop   := ∀ ⦃x y : α
 def is_dec_refl {α : Sort u} (p : α → α → bool) : Prop := ∀ x, p x x = tt
 
 open decidable
+@[inline]
 instance : decidable_eq bool
 | ff ff := is_true rfl
 | ff tt := is_false bool.ff_ne_tt
