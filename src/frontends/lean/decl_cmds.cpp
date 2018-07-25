@@ -32,6 +32,7 @@ Author: Leonardo de Moura
 #include "frontends/lean/definition_cmds.h"
 #include "frontends/lean/inductive_cmds.h"
 #include "frontends/lean/info_manager.h"
+#include "util/sexpr/option_declarations.h"
 
 namespace lean {
 // TODO(Leo): delete
@@ -626,6 +627,7 @@ void register_decl_cmds(cmd_table & r) {
 }
 
 void initialize_decl_cmds() {
+    register_bool_option({"skip_proofs"}, false, "skip proofs");
 }
 void finalize_decl_cmds() {
 }
