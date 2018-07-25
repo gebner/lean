@@ -9,6 +9,9 @@ Author: Leonardo de Moura
 #include "kernel/expr.h"
 #include "frontends/lean/cmd_table.h"
 namespace lean {
+
+bool get_skip_proofs(options const &);
+
 class parser;
 /** \brief Parse (optional) universe parameters <tt>'.{' l_1 ... l_k '}'</tt>
     Store the result in \c ps.

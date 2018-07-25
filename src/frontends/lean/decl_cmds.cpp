@@ -32,8 +32,16 @@ Author: Leonardo de Moura
 #include "frontends/lean/definition_cmds.h"
 #include "frontends/lean/inductive_cmds.h"
 #include "frontends/lean/info_manager.h"
+#include "util/sexpr/option_declarations.h"
 
 namespace lean {
+
+static name * g_skip_proofs = nullptr;
+
+bool get_skip_proofs(options const & opts) {
+    return opts.get_bool(*g_skip_proofs, false);
+}
+
 // TODO(Leo): delete
 void update_univ_parameters(parser_info & p, buffer<name> & lp_names, name_set const & found);
 
@@ -625,7 +633,10 @@ void register_decl_cmds(cmd_table & r) {
 }
 
 void initialize_decl_cmds() {
+    g_skip_proofs = new name("skip_proofs");
+    register_bool_option(*g_skip_proofs, false, "do not elaborate examples and proofs of theorems and replace them by axioms");
 }
 void finalize_decl_cmds() {
+    delete g_skip_proofs;
 }
 }

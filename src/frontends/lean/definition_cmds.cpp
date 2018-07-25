@@ -41,6 +41,7 @@ Author: Leonardo de Moura
 #include "frontends/lean/util.h"
 #include "frontends/lean/decl_util.h"
 #include "frontends/lean/decl_attributes.h"
+#include "frontends/lean/decl_cmds.h"
 #include "frontends/lean/definition_cmds.h"
 
 namespace lean {
@@ -253,6 +254,8 @@ declare_definition(parser_info const & p, environment const & env, decl_cmd_kind
     bool use_conv_opt = true;
     bool is_trusted   = !meta.m_modifiers.m_is_meta;
     auto def          =
+        (kind == decl_cmd_kind::Theorem && get_skip_proofs(p.get_options())) ?
+        mk_axiom(c_real_name, to_list(lp_names), type) :
         !val ? mk_theorem(c_real_name, to_list(lp_names), type, proof) :
         (kind == decl_cmd_kind::Theorem ?
          mk_theorem(c_real_name, to_list(lp_names), type, *val) :
@@ -822,13 +825,15 @@ environment single_definition_cmd_core(parser_info & p, decl_cmd_kind kind, cmd_
             auto pos_provider = p.get_parser_pos_provider(header_pos);
             bool use_info_manager = get_global_info_manager() != nullptr;
             std::string file_name = p.get_file_name();
-            auto proof = add_library_task(task_builder<expr>([=] {
+            auto proof = get_skip_proofs(p.get_options()) ?  mk_pure_task(mk_sorry(type)) :
+                add_library_task(task_builder<expr>([=] {
                 return elaborate_proof(decl_env, opts, header_pos, new_params_list,
                                        new_fn, val, thm_finfo, is_rfl, type,
                                        mctx, lctx, pos_provider, use_info_manager, file_name);
             }), log_tree::ElaborationLevel);
             env_n = declare_definition(p, elab.env(), kind, lp_names, c_name, prv_name, type, opt_val, proof, meta, is_abbrev, header_pos);
         } else if (kind == decl_cmd_kind::Example) {
+            if (get_skip_proofs(p.get_options())) return p.env();
             auto env = p.env();
             auto opts = p.get_options();
             auto lp_name_list = to_list(lp_names);
