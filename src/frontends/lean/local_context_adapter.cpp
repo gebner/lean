@@ -56,7 +56,7 @@ local_context_adapter::local_context_adapter(list<expr> const & lctx) {
 expr local_context_adapter::translate_to(expr const & e) const {
     lean_assert(!has_local_ref(e));
     expr r = replace_locals(e, m_locals, m_local_refs);
-    lean_assert(!has_regular_local(r));
+    // lean_assert(!has_regular_local(r));
     return r;
 }
 

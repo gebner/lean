@@ -90,6 +90,7 @@ void invoke_debugger() {
     if (!g_debug_dialog) {
         throw unreachable_reached();
     }
+    debuggable_exit();
     for (;;) {
         if (std::cin.eof())
             debuggable_exit();
