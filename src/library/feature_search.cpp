@@ -225,32 +225,6 @@ feature to_feature(vm_obj const & o) {
     }
 }
 
-#define define_vm_external(cls) \
-    struct vm_##cls : public vm_external { \
-        cls m_val; \
-        vm_##cls(cls && val) : m_val(val) {} \
-        vm_##cls(cls const & val) : m_val(val) {} \
-        virtual ~vm_##cls() {} \
-        virtual void dealloc() override { \
-            this->~vm_##cls(); \
-            get_vm_allocator().deallocate(sizeof(vm_##cls), this); \
-        } \
-        virtual vm_external * ts_clone(vm_clone_fn const &) override { \
-            return new vm_##cls(m_val); \
-        } \
-        virtual vm_external * clone(vm_clone_fn const &) override { \
-            return new (get_vm_allocator().allocate(sizeof(vm_##cls))) vm_##cls(m_val); \
-        } \
-    }; \
-    vm_obj to_obj(cls const & val) { \
-        return mk_vm_external(new (get_vm_allocator().allocate(sizeof(vm_##cls))) vm_##cls(val)); \
-    } \
-    cls const & to_##cls(vm_obj const & o) { \
-        auto ext_##cls = dynamic_cast<vm_##cls *>(to_external(o)); \
-        lean_vm_check(ext_##cls); \
-        return ext_##cls->m_val; \
-    }
-
 define_vm_external(feature_vec)
 
 static vm_obj feature_vec_of_expr(vm_obj const & e_, vm_obj const & s_) {
