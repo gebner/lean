@@ -32,6 +32,9 @@ namespace lean {
 
 using feature_vec = std::vector<feature>;
 
+feature_vec isect(feature_vec const & a, feature_vec const & b);
+feature_vec union_(feature_vec const & a, feature_vec const & b);
+
 struct feature_collector {
     type_context_old & m_ctx;
 

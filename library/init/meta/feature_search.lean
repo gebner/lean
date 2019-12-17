@@ -31,6 +31,12 @@ namespace feature_vec
 meta constant of_expr (e : expr) : tactic feature_vec
 meta constant of_exprs (es : list expr) : tactic (list feature_vec)
 
+protected meta constant union (a b : feature_vec) : feature_vec
+meta instance : has_union feature_vec := ⟨feature_vec.union⟩
+
+protected meta constant isect (a b : feature_vec) : feature_vec
+meta instance : has_inter feature_vec := ⟨feature_vec.isect⟩
+
 meta def of_proof (prf : expr) : tactic feature_vec :=
 infer_type prf >>= of_expr
 

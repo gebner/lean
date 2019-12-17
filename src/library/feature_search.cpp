@@ -12,6 +12,20 @@
 
 namespace lean {
 
+feature_vec isect(feature_vec const & a, feature_vec const & b) {
+    std::unordered_set<feature> a_set(a.begin(), a.end());
+    feature_vec result;
+    for (auto & x : b) if (a_set.count(x)) result.push_back(x);
+    return result;
+}
+
+feature_vec union_(feature_vec const & a, feature_vec const & b) {
+    std::unordered_set<feature> a_set(a.begin(), a.end());
+    feature_vec result(a.begin(), a.end());
+    for (auto & x : b) if (!a_set.count(x)) result.push_back(x);
+    return result;
+}
+
 feature_collector::feature_collector(type_context_old & ctx) : m_ctx(ctx) {
     auto i = [&] (name const & n) { m_ignored_consts.insert(n); };
     i({"eq"});
@@ -227,6 +241,14 @@ feature to_feature(vm_obj const & o) {
 
 define_vm_external(feature_vec)
 
+static vm_obj feature_vec_isect(vm_obj const & a_, vm_obj const & b_) {
+    return to_obj(isect(to_feature_vec(a_), to_feature_vec(b_)));
+}
+
+static vm_obj feature_vec_union(vm_obj const & a_, vm_obj const & b_) {
+    return to_obj(union_(to_feature_vec(a_), to_feature_vec(b_)));
+}
+
 static vm_obj feature_vec_of_expr(vm_obj const & e_, vm_obj const & s_) {
     auto & s = tactic::to_state(s_);
     type_context_old ctx = mk_type_context_for(s);
@@ -300,6 +322,8 @@ void initialize_feature_search() {
     DECLARE_VM_BUILTIN(name({"feature_search", "feature_vec", "of_expr"}), feature_vec_of_expr);
     DECLARE_VM_BUILTIN(name({"feature_search", "feature_vec", "of_exprs"}), feature_vec_of_exprs);
     DECLARE_VM_BUILTIN(name({"feature_search", "feature_vec", "to_list"}), feature_vec_to_list);
+    DECLARE_VM_BUILTIN(name({"feature_search", "feature_vec", "isect"}), feature_vec_isect);
+    DECLARE_VM_BUILTIN(name({"feature_search", "feature_vec", "union"}), feature_vec_union);
     DECLARE_VM_BUILTIN(name({"feature_search", "feature_stats", "of_feature_vecs"}), feature_stats_of_feature_vecs);
     DECLARE_VM_BUILTIN(name({"feature_search", "feature_stats", "idf"}), feature_stats_idf);
     DECLARE_VM_BUILTIN(name({"feature_search", "feature_stats", "dotp"}), feature_stats_dotp);
