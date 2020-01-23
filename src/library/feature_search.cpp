@@ -9,6 +9,7 @@
 #include <cmath>
 #include "library/vm/vm_float.h"
 #include "kernel/free_vars.h"
+#include "library/constants.h"
 
 namespace lean {
 
@@ -36,6 +37,11 @@ feature_collector::feature_collector(type_context_old & ctx) : m_ctx(ctx) {
     i({"not"});
     i({"and"});
     i({"or"});
+
+    auto j = [&] (name const & n) { m_ignored_preds.insert(n); };
+    j({"decidable"});
+    j({"decidable_eq"});
+    j({"decidable_rel"});
 }
 
 struct collect_visitor {
@@ -46,6 +52,7 @@ struct collect_visitor {
     type_context_old & ctx() { return m_collector.m_ctx; }
 
     bool ignored(name const & n) { return !!m_collector.m_ignored_consts.count(n); }
+    bool ignored_pred(name const & n) { return !!m_collector.m_ignored_preds.count(n); }
 
     void visit_let(expr const & e) {
         visit(let_value(e));
@@ -101,6 +108,8 @@ struct collect_visitor {
         expr fn_ty;
         switch (fn.kind()) {
             case expr_kind::Constant:
+                if (ignored_pred(const_name(fn)))
+                    return;
                 if (!ignored(const_name(fn)))
                     m_feats.insert(feature(const_name(fn)));
                 fn_sym = some(const_name(fn));

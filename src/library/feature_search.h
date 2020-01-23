@@ -39,6 +39,7 @@ struct feature_collector {
     type_context_old & m_ctx;
 
     name_hash_set m_ignored_consts;
+    name_hash_set m_ignored_preds;
 
     feature_vec operator()(expr const & thm);
 
