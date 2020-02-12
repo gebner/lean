@@ -74,4 +74,10 @@ meta instance : has_to_format feature_stats := ⟨to_fmt ∘ feature_stats.featu
 
 end feature_stats
 
+meta constant predictor : Type
+
+meta constant predictor.predict : predictor → feature_vec → ℕ → list (name × float)
+
 end feature_search
+
+meta constant environment.mk_predictor : environment → feature_search.predictor

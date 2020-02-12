@@ -6,10 +6,15 @@
 #include "library/vm/vm_expr.h"
 #include "library/vm/vm_name.h"
 #include "library/vm/vm_list.h"
+#include "library/vm/vm_environment.h"
+#include "library/vm/vm_nat.h"
 #include <cmath>
 #include "library/vm/vm_float.h"
 #include "kernel/free_vars.h"
 #include "library/constants.h"
+#include "library/predict/predict.h"
+#include "kernel/for_each_fn.h"
+#include <functional>
 
 namespace lean {
 
@@ -232,6 +237,95 @@ float feature_stats::cosine_similarity(feature_vec const & a, feature_vec const 
     return dotp(a,b) / norm(a) / norm(b);
 }
 
+struct predictor {
+    std::unique_ptr<::predictor> m_predictor;
+
+    std::unordered_map<name, long, name_hash, name_eq> m_thms;
+    std::vector<name> m_thm_names;
+
+    std::unordered_map<feature, long> m_feats;
+    long m_feat_cnt = 0;
+
+    long of_thm(name const & n) {
+        auto it = m_thms.find(n);
+        if (it != m_thms.end()) {
+            return it->second;
+        }
+        long i = m_thm_names.size();
+        m_thm_names.push_back(n);
+        m_thms[n] = i;
+        return i;
+    }
+
+    long of_feature(feature const & f) {
+        auto it = m_feats.find(f);
+        if (it != m_feats.end()) {
+            return it->second;
+        }
+        long i = m_feat_cnt++;
+        m_feats[f] = i;
+        return i;
+    }
+
+    std::vector<std::pair<name, double>> predict(feature_vec const & fv, unsigned num_results) {
+        std::vector<long> fv_; fv_.reserve(fv.size());
+        for (auto & f : fv) {
+            auto it = m_feats.find(f);
+            if (it != m_feats.end()) {
+                fv_.push_back(it->second);
+            }
+        }
+        auto thm_idxs = m_predictor->predict(fv_, num_results);
+        std::vector<std::pair<name, double>> thms; thms.reserve(thm_idxs.size());
+        for (auto & thm_idx : thm_idxs) {
+            thms.push_back({m_thm_names.at(thm_idx.first), thm_idx.second});
+        }
+        return thms;
+    }
+};
+
+std::shared_ptr<predictor> mk_predictor(environment const & env, predictor_type type = predictor_type::BAYES) {
+    type_context_old tc(env);
+    feature_collector fc(tc);
+    auto p = std::make_shared<predictor>();
+    std::vector<std::vector<long>> deps;
+    std::vector<std::vector<long>> syms;
+    env.for_each_declaration([&] (declaration const & decl) {
+        if (!decl.is_trusted()) return;
+        optional<expr> value;
+        if (decl.is_definition()) {
+            value = decl.get_value();
+        } else if (decl.is_theorem()) {
+            value = peek(decl.get_value_task());
+        }
+
+        long i = p->of_thm(decl.get_name());
+        if (static_cast<size_t>(i) >= deps.size()) {
+            deps.resize(i+1);
+            syms.resize(i+1);
+        }
+
+        auto & ss = syms[i];
+        for (auto & f : fc(decl.get_type())) ss.push_back(p->of_feature(f));
+
+        name_hash_set ds;
+        ds.insert(decl.get_name());
+        if (value) {
+            for_each(*value, [&] (expr const & e, unsigned) {
+                if (is_constant(e)) {
+                    ds.insert(const_name(e));
+                }
+                return true;
+            });
+        }
+        auto & ds_ = deps[i];
+        for (auto & d : ds) ds_.push_back(p->of_thm(d));
+    });
+    p->m_predictor.reset(new ::predictor(type, deps, syms));
+    p->m_predictor->learn_all();
+    return p;
+}
+
 vm_obj to_obj(feature const & f) {
     if (f.m_parent) {
         return mk_vm_constructor(1, to_obj(*f.m_parent), to_obj(f.m_name));
@@ -327,6 +421,27 @@ static vm_obj feature_stats_features(vm_obj const & fs_) {
     return to_obj(feats);
 }
 
+define_vm_external_core(predictor, std::shared_ptr<predictor>)
+
+static vm_obj environment_mk_predictor(vm_obj const & env_) {
+    return to_obj(mk_predictor(to_env(env_)));
+}
+
+static vm_obj predictor_predict(vm_obj const & p_, vm_obj const & fv_, vm_obj const & n_) {
+    auto & p = to_predictor(p_);
+    auto & fv = to_feature_vec(fv_);
+    unsigned n = to_unsigned(n_);
+    auto results = p->predict(fv, n);
+    buffer<vm_obj> results_;
+    for (auto & res : results) {
+        results_.push_back(mk_vm_pair(
+            to_obj(res.first),
+            to_obj(res.second)
+        ));
+    }
+    return to_obj(results_);
+}
+
 void initialize_feature_search() {
     DECLARE_VM_BUILTIN(name({"feature_search", "feature_vec", "of_expr"}), feature_vec_of_expr);
     DECLARE_VM_BUILTIN(name({"feature_search", "feature_vec", "of_exprs"}), feature_vec_of_exprs);
@@ -339,6 +454,8 @@ void initialize_feature_search() {
     DECLARE_VM_BUILTIN(name({"feature_search", "feature_stats", "norm"}), feature_stats_norm);
     DECLARE_VM_BUILTIN(name({"feature_search", "feature_stats", "cosine_similarity"}), feature_stats_cosine_similarity);
     DECLARE_VM_BUILTIN(name({"feature_search", "feature_stats", "features"}), feature_stats_features);
+    DECLARE_VM_BUILTIN(name({"environment", "mk_predictor"}), environment_mk_predictor);
+    DECLARE_VM_BUILTIN(name({"feature_search", "predictor", "predict"}), predictor_predict);
 }
 
 void finalize_feature_search() {}
