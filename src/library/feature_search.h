@@ -35,15 +35,24 @@ using feature_vec = std::vector<feature>;
 feature_vec isect(feature_vec const & a, feature_vec const & b);
 feature_vec union_(feature_vec const & a, feature_vec const & b);
 
+struct feature_cfg {
+    bool m_ignore_tc = true;
+    bool m_ignore_pi_domain = true;
+    bool m_ignore_type_args = true;
+    bool m_ignore_decidable = true;
+    bool m_ignore_conns = true;
+};
+
 struct feature_collector {
     type_context_old & m_ctx;
 
     name_hash_set m_ignored_consts;
     name_hash_set m_ignored_preds;
+    feature_cfg m_cfg;
 
     feature_vec operator()(expr const & thm);
 
-    feature_collector(type_context_old & ctx);
+    feature_collector(type_context_old & ctx, feature_cfg const & cfg);
 
     friend struct collect_visitor;
 };

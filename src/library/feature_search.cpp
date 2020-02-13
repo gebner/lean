@@ -1,7 +1,6 @@
 #include "kernel/expr_sets.h"
 #include "kernel/instantiate.h"
 #include "library/feature_search.h"
-#include "library/tactic/tactic_state.h"
 #include "library/vm/vm.h"
 #include "library/vm/vm_expr.h"
 #include "library/vm/vm_name.h"
@@ -32,21 +31,27 @@ feature_vec union_(feature_vec const & a, feature_vec const & b) {
     return result;
 }
 
-feature_collector::feature_collector(type_context_old & ctx) : m_ctx(ctx) {
+feature_collector::feature_collector(type_context_old & ctx, feature_cfg const & cfg)
+        : m_ctx(ctx), m_cfg(cfg) {
     auto i = [&] (name const & n) { m_ignored_consts.insert(n); };
-    i({"eq"});
-    i({"ne"});
-    i({"heq"});
-    i({"Exists"});
-    i({"iff"});
-    i({"not"});
-    i({"and"});
-    i({"or"});
+    if (m_cfg.m_ignore_conns) {
+        i({"eq"});
+        i({"ne"});
+        i({"heq"});
+        i({"Exists"});
+        i({"iff"});
+        i({"not"});
+        i({"and"});
+        i({"or"});
+    }
 
     auto j = [&] (name const & n) { m_ignored_preds.insert(n); };
-    j({"decidable"});
-    j({"decidable_eq"});
-    j({"decidable_rel"});
+    if (m_cfg.m_ignore_decidable) {
+        j({"decidable"});
+        j({"decidable_eq"});
+        j({"decidable_rel"});
+        j({"decidable_pred"});
+    }
 }
 
 struct collect_visitor {
@@ -55,6 +60,7 @@ struct collect_visitor {
     expr_set m_visited;
 
     type_context_old & ctx() { return m_collector.m_ctx; }
+    feature_cfg & cfg() { return m_collector.m_cfg; }
 
     bool ignored(name const & n) { return !!m_collector.m_ignored_consts.count(n); }
     bool ignored_pred(name const & n) { return !!m_collector.m_ignored_preds.count(n); }
@@ -84,7 +90,7 @@ struct collect_visitor {
         // }
         // visit(instantiate_rev(*e, ls.size(), ls.data()));
 
-        if (!has_free_var(binding_body(e0), 0)) {
+        if (!cfg().m_ignore_pi_domain || !has_free_var(binding_body(e0), 0)) {
             // only visit lhs of implications
             visit(binding_domain(e0));
         }
@@ -134,11 +140,11 @@ struct collect_visitor {
                 auto bi = binding_info(fn_ty);
                 auto & bd = binding_domain(fn_ty);
                 fn_ty = binding_body(fn_ty);
-                if (bi.is_inst_implicit()) {
+                if (cfg().m_ignore_tc && bi.is_inst_implicit()) {
                     // ignore implicit arguments
                     continue;
                 }
-                if (is_sort(bd) && has_free_var(fn_ty, 0)) {
+                if (cfg().m_ignore_type_args && is_sort(bd) && has_free_var(fn_ty, 0)) {
                     // ignore arguments for type polymorphism
                     continue;
                 }
@@ -194,8 +200,8 @@ feature_vec feature_collector::operator()(expr const & thm) {
     return collector.to_vector();
 }
 
-feature_vec feature_vec_of(type_context_old & ctx, expr const & e) {
-    feature_collector collector(ctx);
+feature_vec feature_vec_of(type_context_old & ctx, expr const & e, feature_cfg const & cfg) {
+    feature_collector collector(ctx, cfg);
     return collector(e);
 }
 
@@ -284,9 +290,9 @@ struct predictor {
     }
 };
 
-std::shared_ptr<predictor> mk_predictor(environment const & env, predictor_type type = predictor_type::BAYES) {
+std::shared_ptr<predictor> mk_predictor(environment const & env, predictor_type type, feature_cfg const & cfg) {
     type_context_old tc(env);
-    feature_collector fc(tc);
+    feature_collector fc(tc, cfg);
     auto p = std::make_shared<predictor>();
     std::vector<std::vector<long>> deps;
     std::vector<std::vector<long>> syms;
@@ -342,6 +348,25 @@ feature to_feature(vm_obj const & o) {
     }
 }
 
+predictor_type to_predictor_type(vm_obj const & o) {
+    switch (cidx(o)) {
+        case 0: return predictor_type::KNN;
+        case 1: return predictor_type::MEPO;
+        case 2: return predictor_type::BAYES;
+        default: vm_check_failed("unknown value for predictor_type");
+    }
+}
+
+feature_cfg to_feature_cfg(vm_obj const & o) {
+    feature_cfg cfg;
+    cfg.m_ignore_tc = to_bool(cfield(o, 0));
+    cfg.m_ignore_pi_domain = to_bool(cfield(o, 1));
+    cfg.m_ignore_type_args = to_bool(cfield(o, 2));
+    cfg.m_ignore_decidable = to_bool(cfield(o, 3));
+    cfg.m_ignore_conns = to_bool(cfield(o, 4));
+    return cfg;
+}
+
 define_vm_external(feature_vec)
 
 static vm_obj feature_vec_isect(vm_obj const & a_, vm_obj const & b_) {
@@ -352,18 +377,18 @@ static vm_obj feature_vec_union(vm_obj const & a_, vm_obj const & b_) {
     return to_obj(union_(to_feature_vec(a_), to_feature_vec(b_)));
 }
 
-static vm_obj feature_vec_of_expr(vm_obj const & e_, vm_obj const & s_) {
-    auto & s = tactic::to_state(s_);
-    type_context_old ctx = mk_type_context_for(s);
+static vm_obj feature_vec_of_expr(vm_obj const & env_, vm_obj const & e_, vm_obj const & cfg_) {
+    auto & env = to_env(env_);
+    type_context_old ctx(env);
     auto & e = to_expr(e_);
-    auto fv = feature_vec_of(ctx, e);
-    return tactic::mk_success(to_obj(std::move(fv)), s);
+    auto fv = feature_vec_of(ctx, e, to_feature_cfg(cfg_));
+    return to_obj(std::move(fv));
 }
 
-static vm_obj feature_vec_of_exprs(vm_obj const & es_, vm_obj const & s_) {
-    auto & s = tactic::to_state(s_);
-    type_context_old ctx = mk_type_context_for(s);
-    feature_collector collector(ctx);
+static vm_obj feature_vec_of_exprs(vm_obj const & env_, vm_obj const & es_, vm_obj const & cfg_) {
+    auto & env = to_env(env_);
+    type_context_old ctx(env);
+    feature_collector collector(ctx, to_feature_cfg(cfg_));
 
     buffer<vm_obj> fvs;
     vm_obj const * iter = &es_;
@@ -373,7 +398,7 @@ static vm_obj feature_vec_of_exprs(vm_obj const & es_, vm_obj const & s_) {
         iter = &cfield(*iter, 1);
     }
 
-    return tactic::mk_success(to_obj(fvs), s);
+    return to_obj(fvs);
 }
 
 static vm_obj feature_vec_to_list(vm_obj const & fv_) {
@@ -423,8 +448,10 @@ static vm_obj feature_stats_features(vm_obj const & fs_) {
 
 define_vm_external_core(predictor, std::shared_ptr<predictor>)
 
-static vm_obj environment_mk_predictor(vm_obj const & env_) {
-    return to_obj(mk_predictor(to_env(env_)));
+static vm_obj environment_mk_predictor(vm_obj const & env_, vm_obj const & p_cfg_) {
+    auto & cfg_ = cfield(p_cfg_, 0);
+    auto & type_ = cfield(p_cfg_, 1);
+    return to_obj(mk_predictor(to_env(env_), to_predictor_type(type_), to_feature_cfg(cfg_)));
 }
 
 static vm_obj predictor_predict(vm_obj const & p_, vm_obj const & fv_, vm_obj const & n_) {

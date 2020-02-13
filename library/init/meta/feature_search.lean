@@ -2,6 +2,13 @@ namespace feature_search
 
 open tactic native
 
+structure feature_cfg :=
+(ignore_tc := tt)
+(ignore_pi_domain := tt)
+(ignore_type_args := tt)
+(ignore_decidable := tt)
+(ignore_conns := tt)
+
 @[derive decidable_eq]
 meta inductive feature
 | const (n : name)
@@ -28,8 +35,8 @@ meta constant feature_vec : Type
 
 namespace feature_vec
 
-meta constant of_expr (e : expr) : tactic feature_vec
-meta constant of_exprs (es : list expr) : tactic (list feature_vec)
+meta constant of_expr (env : environment) (e : expr) (cfg : feature_cfg := {}) : feature_vec
+meta constant of_exprs (env : environment) (es : list expr) (cfg : feature_cfg := {}) : list feature_vec
 
 protected meta constant union (a b : feature_vec) : feature_vec
 meta instance : has_union feature_vec := ⟨feature_vec.union⟩
@@ -37,12 +44,15 @@ meta instance : has_union feature_vec := ⟨feature_vec.union⟩
 protected meta constant isect (a b : feature_vec) : feature_vec
 meta instance : has_inter feature_vec := ⟨feature_vec.isect⟩
 
-meta def of_proof (prf : expr) : tactic feature_vec :=
-infer_type prf >>= of_expr
+meta def of_proof (prf : expr) (cfg : feature_cfg := {}) : tactic feature_vec := do
+ty ← infer_type prf,
+env ← get_env,
+pure $ of_expr env ty cfg
 
-meta def of_thm (n : name) : tactic feature_vec := do
+meta def of_thm (n : name) (cfg : feature_cfg := {}) : tactic feature_vec := do
 decl ← get_decl n,
-of_expr decl.type
+env ← get_env,
+pure $ of_expr env decl.type cfg
 
 protected meta constant to_list (fv : feature_vec) : list feature
 
@@ -76,8 +86,17 @@ end feature_stats
 
 meta constant predictor : Type
 
-meta constant predictor.predict : predictor → feature_vec → ℕ → list (name × float)
+meta constant predictor.predict (p : predictor) (goal : feature_vec) (max_results : ℕ) :
+  list (name × float)
+
+@[derive decidable_eq]
+inductive predictor_type
+| knn | mepo | bayes
+
+structure predictor_cfg extends feature_cfg :=
+(type := predictor_type.bayes)
 
 end feature_search
 
-meta constant environment.mk_predictor : environment → feature_search.predictor
+open feature_search
+meta constant environment.mk_predictor (env : environment) (cfg : predictor_cfg := {}) : predictor
