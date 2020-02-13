@@ -1,3 +1,6 @@
+prelude
+import init.meta.tactic init.meta.derive init.meta.mk_dec_eq_instance init.meta.float
+
 namespace feature_search
 
 open tactic native
