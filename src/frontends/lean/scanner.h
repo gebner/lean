@@ -65,6 +65,7 @@ protected:
     void move_back(unsigned offset, unsigned u_offset);
     void read_single_line_comment();
     void read_comment_block();
+    void read_comment_block_doc();
     void read_until(uchar const * end_str, char const * error_msg);
     unsigned get_utf8_size(uchar c);
     void next_utf_core(uchar c, buffer<uchar> & cs);
@@ -84,12 +85,12 @@ protected:
     void read_doc_block_core();
     token_kind read_doc_block();
     token_kind read_mod_doc_block();
+    token_kind read_string_block();
 
 public:
     scanner(std::istream & strm, char const * strm_name = nullptr);
-    scanner(std::istream & strm, char const * strm_name, pos_info const & pos);
 
-    void skip_to_pos(pos_info const &);
+    bool skip_to_pos(pos_info const &);
 
     int get_line() const { return m_line; }
     int get_pos() const { return m_pos; }

@@ -202,9 +202,11 @@ transition read_transition(deserializer & d) {
     return transition(n, a, pp);
 }
 
+struct notation_prio_fn { unsigned operator()(notation_entry const & v) const { return v.priority(); } };
+
 struct notation_state {
     typedef rb_map<mpz, list<expr>, mpz_cmp_fn> num_map;
-    typedef head_map<notation_entry>            head_to_entries;
+    typedef head_map_prio<notation_entry, notation_prio_fn> head_to_entries;
     parse_table      m_nud;
     parse_table      m_led;
     num_map          m_num_map;
@@ -395,7 +397,7 @@ cmd_table const & get_cmd_table(environment const & env) {
 }
 
 environment add_command(environment const & env, name const & n, cmd_info const & info) {
-    auto env2 = token_ext::register_entry(env, get_dummy_ios(), token_entry(n.to_string()));
+    auto env2 = token_ext::register_entry(env, get_dummy_ios(), token_entry(n.to_string_unescaped()));
     cmd_ext ext = get_extension(env2);
     ext.m_cmds.insert(n, info);
     return env2.update(g_ext->m_ext_id, std::make_shared<cmd_ext>(ext));

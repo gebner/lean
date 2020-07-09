@@ -212,6 +212,11 @@ FOREACH(T ${LEANPKGTESTS})
 ENDFOREACH(T)
 endif()
 
+# LEAN IMPORTING TEST
+add_test(NAME "leantest_importing"
+         WORKING_DIRECTORY "${LEAN_SOURCE_DIR}/../tests/lean/importing/"
+         COMMAND bash "./test_importing.sh" "${LEAN_SOURCE_DIR}/../bin/lean")
+
 # LEAN TESTS using --trust=0
 file(GLOB LEANT0TESTS "${LEAN_SOURCE_DIR}/../tests/lean/trust0/*.lean")
 FOREACH(T ${LEANT0TESTS})
@@ -237,6 +242,17 @@ FOREACH(T ${LEANITTESTS})
   GET_FILENAME_COMPONENT(T_NAME ${T} NAME)
   add_test(NAME "leanittest_${T_NAME}"
            WORKING_DIRECTORY "${LEAN_SOURCE_DIR}/../tests/lean/interactive"
+           COMMAND bash "./test_single.sh" "${CMAKE_CURRENT_BINARY_DIR}/lean" ${T_NAME})
+ENDFOREACH(T)
+endif()
+
+if("${MULTI_THREAD}" MATCHES "ON")
+# LEAN WIDGET TESTS
+file(GLOB LEANWIDGETTESTS "${LEAN_SOURCE_DIR}/../tests/lean/widget/*.input")
+FOREACH(T ${LEANWIDGETTESTS})
+  GET_FILENAME_COMPONENT(T_NAME ${T} NAME)
+  add_test(NAME "leanwidgettest_${T_NAME}"
+           WORKING_DIRECTORY "${LEAN_SOURCE_DIR}/../tests/lean/widget"
            COMMAND bash "./test_single.sh" "${CMAKE_CURRENT_BINARY_DIR}/lean" ${T_NAME})
 ENDFOREACH(T)
 endif()

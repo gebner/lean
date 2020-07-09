@@ -6,6 +6,7 @@ Author: Leonardo de Moura
 */
 #pragma once
 #include <vector>
+#include <string>
 #include "kernel/pos_info_provider.h"
 #include "library/local_context.h"
 #include "library/type_context.h"
@@ -51,11 +52,13 @@ private:
     list<expr>        m_numeral_types;
     list<expr_pair>   m_tactics;
     list<expr_pair>   m_holes;
+    rb_expr_map<pos_info> m_underscores;
 
     /* m_depth is only used for tracing */
     unsigned          m_depth{0};
 
     bool              m_uses_infom;
+    bool              m_term_goals = true;
     bool              m_coercions;
 
     struct snapshot {
@@ -295,6 +298,8 @@ public:
     elaborator(environment const & env, options const & opts, name const & decl_name,
                metavar_context const & mctx, local_context const & lctx,
                bool recover_from_errors = true, bool in_pattern = false, bool in_quote = false);
+    elaborator(type_context_old && ctx, options const & opts, name const & decl_name,
+        bool recover_from_errors = true, bool in_pattern = false, bool in_quote = false);
     ~elaborator();
     abstract_context_cache & get_cache() { return m_cache; }
     metavar_context const & mctx() const { return m_ctx.mctx(); }
@@ -317,8 +322,7 @@ public:
     expr elaborate(expr const & e);
     expr elaborate_type(expr const & e);
     expr_pair elaborate_with_type(expr const & e, expr const & e_type);
-    void report_error(tactic_state const & s, char const * state_header,
-                      char const * msg, expr const & ref);
+    void report_error(tactic_state const & s, std::string const & msg, expr const & ref);
     void ensure_no_unassigned_metavars(expr & e);
     /**
        \brief Finalize all expressions in \c es.

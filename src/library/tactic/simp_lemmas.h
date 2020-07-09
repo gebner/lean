@@ -19,13 +19,13 @@ private:
     simp_lemma_cell * m_ptr;
     explicit simp_lemma(simp_lemma_cell * ptr);
     simp_lemma_cell * steal_ptr();
-    friend simp_lemma mk_simp_lemma(name const & id, levels const & umetas, list<expr> const & emetas,
+    friend simp_lemma mk_simp_lemma(name const & id, unsigned umetas, list<expr> const & emetas,
                                     list<bool> const & instances, expr const & lhs, expr const & rhs,
                                     expr const & proof, bool is_perm, unsigned priority);
-    friend simp_lemma mk_rfl_lemma(name const & id, levels const & umetas, list<expr> const & emetas,
+    friend simp_lemma mk_rfl_lemma(name const & id, unsigned umetas, list<expr> const & emetas,
                                    list<bool> const & instances, expr const & lhs, expr const & rhs, expr const & proof,
                                    unsigned priority);
-    friend simp_lemma mk_congr_lemma(name const & id, levels const & umetas, list<expr> const & emetas,
+    friend simp_lemma mk_congr_lemma(name const & id, unsigned umetas, list<expr> const & emetas,
                                      list<bool> const & instances, expr const & lhs, expr const & rhs,
                                      expr const & proof, list<expr> const & congr_hyps, unsigned priority);
 public:
@@ -71,6 +71,9 @@ public:
 
 bool operator==(simp_lemma const & r1, simp_lemma const & r2);
 inline bool operator!=(simp_lemma const & r1, simp_lemma const & r2) { return !operator==(r1, r2); }
+
+serializer & operator<<(serializer & s, simp_lemma const & sl);
+deserializer & operator>>(deserializer & d, simp_lemma & sl);
 
 struct simp_lemma_prio_fn { unsigned operator()(simp_lemma const & s) const { return s.get_priority(); } };
 
@@ -137,6 +140,8 @@ simp_lemmas get_simp_lemmas(environment const & env, simp_lemmas_token tk);
 simp_lemmas get_default_simp_lemmas(environment const & env);
 simp_lemmas get_simp_lemmas(environment const & env, name const & tk_name);
 
+simp_lemmas add(type_context_old & ctx, simp_lemmas const & s, name const & id, bool symm, unsigned priority);
+simp_lemmas add(type_context_old & ctx, simp_lemmas const & s, name const & id, expr const & e, expr const & h, bool symm, unsigned priority);
 simp_lemmas add(type_context_old & ctx, simp_lemmas const & s, name const & id, unsigned priority);
 simp_lemmas add(type_context_old & ctx, simp_lemmas const & s, name const & id, expr const & e, expr const & h, unsigned priority);
 simp_lemmas add_congr(type_context_old & ctx, simp_lemmas const & s, name const & id, unsigned priority);

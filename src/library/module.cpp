@@ -89,8 +89,7 @@ struct module_ext : public environment_extension {
     /** Top-level doc strings for modules which have them. Lean doesn't have a notion
      * of module different from that of a source file, so we use file names to index
      * the docstring map. */
-    // TODO(Vtec234): lean::rb_map misbehaves here for some reason
-    std::unordered_map<std::string, std::vector<std::pair<pos_info, std::string>>> m_module_docs;
+    rb_map<std::string, list<std::pair<pos_info, std::string>>, string_cmp> m_module_docs;
     // Map from declaration name to olean file where it was defined
     name_map<std::string>     m_decl2olean;
     name_map<pos_info>        m_decl2pos_info;
@@ -235,10 +234,6 @@ deserializer & operator>>(deserializer & d, module_name & r) {
     return d;
 }
 
-static unsigned olean_hash(std::string const & data) {
-    return hash(data.size(), [&] (unsigned i) { return static_cast<unsigned char>(data[i]); });
-}
-
 void write_module(loaded_module const & mod, std::ostream & out) {
     std::ostringstream out1(std::ios_base::binary);
     serializer s1(out1);
@@ -255,13 +250,15 @@ void write_module(loaded_module const & mod, std::ostream & out) {
     }
 
     std::string r = out1.str();
-    unsigned h    = olean_hash(r);
+    unsigned blob_hash = hash_data(r);
 
     bool uses_sorry = get(mod.m_uses_sorry);
 
     serializer s2(out);
     s2 << g_olean_header << get_version_string();
-    s2 << h;
+    s2 << mod.m_src_hash;
+    s2 << mod.m_trans_hash;
+    s2 << blob_hash;
     s2 << uses_sorry;
     // store imported files
     s2 << static_cast<unsigned>(mod.m_imports.size());
@@ -277,7 +274,7 @@ static task<bool> has_sorry(modification_list const & mods) {
     return any(introduced_exprs, [] (expr const & e) { return has_sorry(e); });
 }
 
-loaded_module export_module(environment const & env, std::string const & mod_name) {
+loaded_module export_module(environment const & env, std::string const & mod_name, unsigned src_hash, unsigned trans_hash) {
     loaded_module out;
     out.m_module_name = mod_name;
 
@@ -290,6 +287,9 @@ loaded_module export_module(environment const & env, std::string const & mod_nam
     std::reverse(out.m_modifications.begin(), out.m_modifications.end());
 
     out.m_uses_sorry = has_sorry(out.m_modifications);
+
+    out.m_src_hash = src_hash;
+    out.m_trans_hash = trans_hash;
 
     return out;
 }
@@ -431,7 +431,7 @@ struct mod_doc_modification : public modification {
     /** A module-level docstring. */
     mod_doc_modification(std::string const & doc, pos_info pos) : m_doc(doc), m_pos(pos) {}
 
-    void perform(environment & env) const override {
+    void perform(environment &) const override {
         // No-op. See `import_module` for actual action
     }
 
@@ -541,7 +541,7 @@ environment add_doc_string(environment const & env, std::string const & doc, pos
     return add(env, std::make_shared<mod_doc_modification>(doc, pos));
 }
 
-std::unordered_map<std::string, std::vector<std::pair<pos_info, std::string>>> const & get_doc_strings(environment const & env) {
+rb_map<std::string, list<std::pair<pos_info, std::string>>, string_cmp> const & get_doc_strings(environment const & env) {
     return get_extension(env).m_module_docs;
 }
 
@@ -579,19 +579,21 @@ optional<declaration> is_decl_modification(modification const & mod) {
 
 } // end of namespace module
 
-bool is_candidate_olean_file(std::string const & file_name) {
-    std::ifstream in(file_name);
+optional<unsigned> src_hash_if_is_candidate_olean(std::string const & file_name) {
+    std::ifstream in(file_name, std::ios_base::binary);
     deserializer d1(in, optional<std::string>(file_name));
     std::string header, version;
     d1 >> header;
     if (header != g_olean_header)
-        return false;
+        return {};
     d1 >> version;
 #ifndef LEAN_IGNORE_OLEAN_VERSION
     if (version != get_version_string())
-        return false;
+        return {};
 #endif
-    return true;
+    unsigned olean_src_hash;
+    d1 >> olean_src_hash;
+    return some<unsigned>(olean_src_hash);
 }
 
 olean_data parse_olean(std::istream & in, std::string const & file_name, bool check_hash) {
@@ -600,12 +602,12 @@ olean_data parse_olean(std::istream & in, std::string const & file_name, bool ch
 
     deserializer d1(in, optional<std::string>(file_name));
     std::string header, version;
-    unsigned claimed_hash;
+    unsigned src_hash, trans_hash, claimed_blob_hash;
     d1 >> header;
     if (header != g_olean_header)
         throw exception(sstream() << "file '" << file_name << "' does not seem to be a valid object Lean file, invalid header");
-    d1 >> version >> claimed_hash;
-    // version has already been checked in `is_candidate_olean_file`
+    d1 >> version >> src_hash >> trans_hash >> claimed_blob_hash;
+    // version has already been checked in `src_hash_if_is_candidate_olean`
 
     d1 >> uses_sorry;
 
@@ -624,12 +626,12 @@ olean_data parse_olean(std::istream & in, std::string const & file_name, bool ch
 
 //    if (m_senv.env().trust_lvl() <= LEAN_BELIEVER_TRUST_LEVEL) {
     if (check_hash) {
-        unsigned computed_hash = olean_hash(code);
-        if (claimed_hash != computed_hash)
+        unsigned computed_hash = hash_data(code);
+        if (claimed_blob_hash != computed_hash)
             throw exception(sstream() << "file '" << file_name << "' has been corrupted, checksum mismatch");
     }
 
-    return { imports, code, uses_sorry };
+    return { imports, code, src_hash, trans_hash, uses_sorry };
 }
 
 static void import_module(environment & env, std::string const & module_file_name, module_name const & ref,
@@ -652,7 +654,7 @@ static void import_module(environment & env, std::string const & module_file_nam
         auto ext = get_extension(env);
         ext.m_imported.insert(res->m_module_name);
         env = update(env, ext);
-    } catch (throwable) {
+    } catch (throwable &) {
         import_errors.push_back({module_file_name, ref, std::current_exception()});
     }
 }
@@ -742,7 +744,9 @@ void import_modification(modification const & m, std::string const & file_name, 
         env = add_decl_olean(env, im->m_decl.get_decl().m_name, file_name);
     } else if (auto mdm = dynamic_cast<mod_doc_modification const *>(&m)) {
         auto ext = get_extension(env);
-        ext.m_module_docs[file_name].emplace_back(mdm->m_pos, mdm->m_doc);
+        auto docs = ext.m_module_docs.find(file_name);
+        ext.m_module_docs[file_name] =
+            cons(std::make_pair(mdm->m_pos, mdm->m_doc), docs ? *docs : list<std::pair<pos_info, std::string>>());
         env = update(env, ext);
     }
 }
@@ -762,8 +766,8 @@ module_loader mk_olean_loader(std::vector<std::string> const & path) {
         auto parsed = parse_olean(in, fn, check_hash);
         auto modifs = parse_olean_modifications(parsed.m_serialized_modifications, fn);
         return std::make_shared<loaded_module>(
-                loaded_module { fn, parsed.m_imports, modifs,
-                                mk_pure_task<bool>(parsed.m_uses_sorry), {} });
+                loaded_module { fn, parsed.m_imports, parsed.m_src_hash, parsed.m_trans_hash,
+                                modifs, mk_pure_task<bool>(parsed.m_uses_sorry), {} });
     };
 }
 

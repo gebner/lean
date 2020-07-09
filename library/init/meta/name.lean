@@ -51,8 +51,7 @@ def name.update_prefix : name → name → name
 | (mk_string s p)  new_p := mk_string s new_p
 | (mk_numeral s p) new_p := mk_numeral s new_p
 
-/- The (decidable_eq string) has not been defined yet.
-   So, we disable the use of if-then-else when compiling the following definitions. -/
+-- Without this option, we get errors when defining the following definitions.
 set_option eqn_compiler.ite false
 
 def name.to_string_with_sep (sep : string) : name → string
@@ -73,8 +72,14 @@ def name.components (n : name) : list name :=
 protected def name.to_string : name → string :=
 name.to_string_with_sep "."
 
+protected def name.repr (n : name) : string :=
+"`" ++ n.to_string
+
 instance : has_to_string name :=
 ⟨name.to_string⟩
+
+instance : has_repr name :=
+⟨name.repr⟩
 
 /- TODO(Leo): provide a definition in Lean. -/
 meta constant name.has_decidable_eq : decidable_eq name
@@ -105,6 +110,12 @@ meta def name.is_prefix_of : name → name → bool
 | p name.anonymous := ff
 | p n              :=
   if p = n then tt else name.is_prefix_of p n.get_prefix
+
+meta def name.is_suffix_of : name → name → bool
+| anonymous _ := tt
+| (mk_string s n) (mk_string s' n') := (s = s') && name.is_suffix_of n n'
+| (mk_numeral v n) (mk_numeral v' n') := (v = v') && name.is_suffix_of n n'
+| _ _ := ff
 
 meta def name.replace_prefix : name → name → name → name
 | anonymous        p p' := anonymous

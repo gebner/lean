@@ -59,6 +59,11 @@ public:
 #define lean_vm_check(cond) { if (LEAN_UNLIKELY(!(cond))) vm_check_failed(#cond); }
 #endif
 
+/** Hashes a VM object. If it's a `vm_external`, then
+ * use `vm_external::hash()`.
+ * [warning] `hash()` is not implemented for all of the inheritors of `vm_external`
+ * and by default returns zero. */
+unsigned hash(vm_obj const & o);
 void display(std::ostream & out, vm_obj const & o);
 
 /** \brief VM object */
@@ -152,6 +157,8 @@ public:
     virtual ~vm_external() {}
     virtual vm_external * ts_clone(vm_clone_fn const &) = 0;
     virtual vm_external * clone(vm_clone_fn const &) = 0;
+    /** A hash function for externals so that equality of vm objects can be checked. */
+    virtual unsigned int hash() = 0;
 };
 
 /* Thread safe vm_obj, it can be used to move vm_obj's between threads.
@@ -175,7 +182,7 @@ public:
 /** Builtin functions that take arguments from the system stack.
 
     \remark The C++ code generator produces this kind of function. */
-typedef vm_obj (*vm_cfunction)(vm_obj const &);
+using vm_cfunction = void *;
 typedef vm_obj (*vm_cfunction_0)();
 typedef vm_obj (*vm_cfunction_1)(vm_obj const &);
 typedef vm_obj (*vm_cfunction_2)(vm_obj const &, vm_obj const &);
@@ -320,7 +327,8 @@ enum class opcode {
     SConstructor, Constructor, Num,
     Destruct, Cases2, CasesN, NatCases, BuiltinCases, Proj,
     Apply, InvokeGlobal, InvokeBuiltin, InvokeCFun,
-    Closure, Unreachable, Expr, LocalInfo
+    Closure, Unreachable, Expr, LocalInfo,
+    String,
 };
 
 /** \brief VM instructions */
@@ -353,6 +361,8 @@ class vm_instr {
         mpz * m_mpz;
         /* Expr */
         expr * m_expr;
+        /* String */
+        std::string * m_string;
         /* LocalInfo */
         struct {
             unsigned        m_local_idx;
@@ -381,6 +391,7 @@ class vm_instr {
     friend vm_instr mk_invoke_builtin_instr(unsigned fn_idx);
     friend vm_instr mk_closure_instr(unsigned fn_idx, unsigned n);
     friend vm_instr mk_expr_instr(expr const &e);
+    friend vm_instr mk_string_instr(std::string const & e);
     friend vm_instr mk_local_info_instr(unsigned idx, name const & n, optional<expr> const & e);
 
     void release_memory();
@@ -482,6 +493,11 @@ public:
         return *m_expr;
     }
 
+    std::string const & get_string() const {
+        lean_assert(m_op == opcode::String);
+        return *m_string;
+    }
+
     unsigned get_local_idx() const {
         lean_assert(m_op == opcode::LocalInfo);
         return m_local_idx;
@@ -509,6 +525,7 @@ vm_instr mk_goto_instr(unsigned pc);
 vm_instr mk_sconstructor_instr(unsigned cidx);
 vm_instr mk_constructor_instr(unsigned cidx, unsigned nfields);
 vm_instr mk_num_instr(mpz const & v);
+vm_instr mk_string_instr(std::string const & s);
 vm_instr mk_ret_instr();
 vm_instr mk_destruct_instr();
 vm_instr mk_unreachable_instr();
@@ -533,12 +550,17 @@ enum class vm_decl_kind { Bytecode, Builtin, CFun };
 struct vm_decl_cell {
     MK_LEAN_RC();
     vm_decl_kind          m_kind;
+    /** The Lean name that the declaration corresponds to */
     name                  m_name;
+    /** The index used to store this declaration in the declaration map. */
     unsigned              m_idx;
     unsigned              m_arity;
     list<vm_local_info>   m_args_info;
     optional<pos_info>    m_pos;
     optional<std::string> m_olean;
+    /** If this declaration has been overridden using `@[vm_override]`, then this has the index of the override decalaration. */
+    optional<unsigned>    m_overridden_idx;
+
     union {
         struct {
             unsigned   m_code_size;
@@ -551,6 +573,7 @@ struct vm_decl_cell {
     vm_decl_cell(name const & n, unsigned idx, unsigned arity, vm_cfunction fn);
     vm_decl_cell(name const & n, unsigned idx, unsigned arity, unsigned code_sz, vm_instr const * code,
                  list<vm_local_info> const & args_info, optional<pos_info> const & pos,
+                 optional<unsigned> const & overridden_idx,
                  optional<std::string> const & olean);
     ~vm_decl_cell();
     void dealloc();
@@ -568,8 +591,9 @@ public:
         vm_decl(new vm_decl_cell(n, idx, arity, fn)) {}
     vm_decl(name const & n, unsigned idx, unsigned arity, unsigned code_sz, vm_instr const * code,
             list<vm_local_info> const & args_info, optional<pos_info> const & pos,
+            optional<unsigned> const & overridden_idx = optional<unsigned>(),
             optional<std::string> const & olean = optional<std::string>()):
-        vm_decl(new vm_decl_cell(n, idx, arity, code_sz, code, args_info, pos, olean)) {}
+        vm_decl(new vm_decl_cell(n, idx, arity, code_sz, code, args_info, pos, overridden_idx, olean)) {}
     vm_decl(vm_decl const & s):m_ptr(s.m_ptr) { if (m_ptr) m_ptr->inc_ref(); }
     vm_decl(vm_decl && s):m_ptr(s.m_ptr) { s.m_ptr = nullptr; }
     ~vm_decl() { if (m_ptr) m_ptr->dec_ref(); }
@@ -589,13 +613,20 @@ public:
     name get_name() const { lean_assert(m_ptr); return m_ptr->m_name; }
     unsigned get_arity() const { lean_assert(m_ptr); return m_ptr->m_arity; }
     unsigned get_code_size() const { lean_assert(is_bytecode()); return m_ptr->m_code_size; }
-    vm_instr const * get_code() const { lean_assert(is_bytecode()); return m_ptr->m_code; }
+    vm_instr const * get_code() const {
+        lean_assert(is_bytecode());
+        return m_ptr->m_code;
+    }
     vm_function get_fn() const { lean_assert(is_builtin()); return m_ptr->m_fn; }
     vm_cfunction get_cfn() const { lean_assert(is_cfun()); return m_ptr->m_cfn; }
     list<vm_local_info> const & get_args_info() const { lean_assert(is_bytecode()); return m_ptr->m_args_info; }
     optional<pos_info> const & get_pos_info() const { lean_assert(is_bytecode()); return m_ptr->m_pos; }
+    optional<unsigned> const & get_overridden_idx() const { lean_assert(m_ptr); return m_ptr->m_overridden_idx; }
+    bool is_overridden() const {lean_assert(m_ptr); return m_ptr->m_overridden_idx.has_value(); }
     optional<std::string> const & get_olean() const { lean_assert(is_bytecode()); return m_ptr->m_olean; }
 };
+
+vm_decl set_overridden(vm_decl const & d, unsigned idx_override);
 
 /** \brief Virtual machine for executing VM bytecode. */
 class vm_state {
@@ -669,6 +700,7 @@ public:
     vm_obj invoke_closure(vm_obj const & fn, unsigned nargs);
 
     vm_decl const & get_decl(unsigned idx) const;
+    vm_decl const & get_decl_no_override(unsigned idx) const;
 
     vm_cases_function const & get_builtin_cases(unsigned idx) const;
 
@@ -748,6 +780,8 @@ public:
     vm_obj const & top() const { return m_stack.back(); }
 
     optional<vm_decl> get_decl(name const & n) const;
+    optional<vm_decl> get_decl_no_override(name const & n) const;
+    optional<vm_decl> get_decl_no_override_of_idx(unsigned int idx) const;
 
     optional<name> curr_fn() const;
 
@@ -886,6 +920,11 @@ void declare_vm_cases_builtin(name const & n, char const * internal_name, vm_cas
 /** \brief Return builtin cases internal index. */
 optional<unsigned> get_vm_builtin_cases_idx(environment const & env, name const & n);
 
+/** Replace the vm declaration of `n` with the vm declaration at `n_override`.
+    If `n` is an inductive declaration, `override_ns` should be provided and
+    gives a namespace which contains overrides for its recursor and constructors. */
+environment add_override(environment const & env, name const & n, name const & n_override, optional<name> const & override_ns);
+
 /** Register in the given environment \c fn as the implementation for function \c n.
     These APIs should be used when we dynamically load native code stored in a shared object (aka DLL)
     that implements lean functions. */
@@ -918,13 +957,16 @@ unsigned get_num_nested_lambdas(expr const & e);
 /** \brief Add bytcode for the function named \c fn in \c env.
     \remark The index for \c fn must have been reserved using reserve_vm_index. */
 environment update_vm_code(environment const & env, name const & fn, unsigned code_sz, vm_instr const * code,
-                           list<vm_local_info> const & args_info, optional<pos_info> const & pos);
+                           list<vm_local_info> const & args_info, optional<pos_info> const & pos,
+                           bool enable_overrides);
 
 /** \brief Combines reserve_vm_index and update_vm_code */
 environment add_vm_code(environment const & env, name const & fn, expr const & e, unsigned code_sz, vm_instr const * code,
-                        list<vm_local_info> const & args_info, optional<pos_info> const & pos);
+                        list<vm_local_info> const & args_info, optional<pos_info> const & pos,
+                        bool enable_overrides);
 environment add_vm_code(environment const & env, name const & fn, unsigned arity, unsigned code_sz, vm_instr const * code,
-                        list<vm_local_info> const & args_info, optional<pos_info> const & pos);
+                        list<vm_local_info> const & args_info, optional<pos_info> const & pos,
+                        bool enable_overrides);
 
 /** \brief Return the internal idx for the given constant. Return none
     if the constant is not builtin nor it has code associated with it. */
@@ -933,7 +975,11 @@ optional<unsigned> get_vm_constant_idx(environment const & env, name const & n);
 /** \brief Return true iff \c fn is a VM function in the given environment. */
 bool is_vm_function(environment const & env, name const & fn);
 
-optional<vm_decl> get_vm_decl(environment const & env, name const & n);
+optional<name> get_vm_override_name(environment const & env, name const & decl_name, bool enable_overrides);
+
+optional<vm_decl> get_vm_decl(environment const & env, name const & n, bool enable_overrides);
+
+optional<vm_decl> get_vm_decl(environment const & env, name const & n, options const & opts);
 
 /** \brief Return the function idx of a builtin function.
     \remark This function must only be invoked after initialize_vm was invoked. */
@@ -997,6 +1043,7 @@ environment vm_monitor_register(environment const & env, name const & d);
         virtual vm_external * clone(vm_clone_fn const &) override { \
             return new (get_vm_allocator().allocate(sizeof(vm_##name))) vm_##name(m_val); \
         } \
+        virtual unsigned int hash() { return 0; } \
     }; \
     vm_obj to_obj(cls const & val) { \
         return mk_vm_external(new (get_vm_allocator().allocate(sizeof(vm_##name))) vm_##name(val)); \

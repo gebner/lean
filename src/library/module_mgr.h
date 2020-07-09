@@ -32,8 +32,14 @@ struct module_info {
 
     module_id m_id;
     std::string m_contents;
+    // Hash of the Lean source (after normalizing line endings) yielding this module:
+    // - if m_source == LEAN, hash_data(remove_cr(m_contents))
+    // - if m_source == OLEAN, value loaded from the .olean
+    unsigned m_src_hash;
+    // Transitive hash of all source code this module was built from,
+    // i.e. m_src_hash mixed with the m_trans_hash of each imported module
+    unsigned m_trans_hash;
     module_src m_source = module_src::LEAN;
-    time_t m_mtime = -1, m_trans_mtime = -1;
 
     struct dependency {
         module_id m_id;
@@ -63,10 +69,13 @@ struct module_info {
 
     module_info() {}
 
-    module_info(module_id const & id, std::string const & contents, module_src src, time_t mtime)
-            : m_id(id), m_contents(contents), m_source(src), m_mtime(mtime) {}
+    module_info(module_id const & id, std::string const & contents, unsigned src_hash, unsigned trans_hash, module_src src)
+            : m_id(id), m_contents(contents), m_src_hash(src_hash), m_trans_hash(trans_hash), m_source(src) {}
 };
 
+/* A virtual interface for loading Lean modules by name. It has two instantiations:
+- `fs_module_vs` for loading modules from disk
+- `server` for loading modules open in an editor */
 class module_vfs {
 public:
     virtual ~module_vfs() {}
@@ -84,6 +93,8 @@ public:
 class module_mgr {
     bool m_server_mode = false;
     bool m_save_olean = false;
+    bool m_use_old_oleans = false;
+    bool m_report_widgets = true;
 
     search_path m_path;
     environment m_initial_env;
@@ -125,6 +136,11 @@ public:
 
     void set_save_olean(bool save_olean) { m_save_olean = save_olean; }
     bool get_save_olean() const { return m_save_olean; }
+
+    void set_use_old_oleans(bool use_old_oleans) { m_use_old_oleans = use_old_oleans; }
+    bool get_use_old_oleans() const { return m_use_old_oleans; }
+    void set_report_widgets(bool report_widgets) { m_report_widgets = report_widgets; }
+    bool get_report_widgets() const { return m_report_widgets; }
 
     environment get_initial_env() const { return m_initial_env; }
     options get_options() const { return m_ios.get_options(); }

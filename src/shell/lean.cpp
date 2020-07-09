@@ -209,6 +209,7 @@ static void display_help(std::ostream & out) {
     std::cout << "  --json             print JSON-formatted structured error messages\n";
     std::cout << "  --server           start lean in server mode\n";
     std::cout << "  --server=file      start lean in server mode, redirecting standard input from the specified file (for debugging)\n";
+    // std::cout << "  --no-widgets       turn off reporting on widgets\n";
 #endif
     std::cout << "  --profile          display elaboration/type checking time for each definition/theorem\n";
     DEBUG_CODE(
@@ -227,6 +228,7 @@ static struct option g_long_options[] = {
     {"run",          required_argument, 0, 'a'},
     {"githash",      no_argument,       0, 'g'},
     {"make",         no_argument,       0, 'm'},
+    {"old-oleans",   no_argument,       0, 'O'},
     {"recursive",    no_argument,       0, 'R'},
     {"export",       required_argument, 0, 'E'},
     {"only-export",  required_argument, 0, 'o'},
@@ -242,6 +244,7 @@ static struct option g_long_options[] = {
     {"json",         no_argument,       0, 'J'},
     {"path",         no_argument,       0, 'p'},
     {"server",       optional_argument, 0, 'S'},
+    {"no-widgets",   no_argument,       0, 'W'},
 #endif
     {"doc",          required_argument, 0, 'r'},
 #if defined(LEAN_MULTI_THREAD)
@@ -426,6 +429,8 @@ int main(int argc, char ** argv) {
 #endif
     ::initializer init;
     bool make_mode          = false;
+    bool use_old_oleans     = false;
+    bool report_widgets     = true;
     bool recursive          = false;
     unsigned trust_lvl      = LEAN_BELIEVER_TRUST_LEVEL+1;
     bool only_deps          = false;
@@ -473,6 +478,12 @@ int main(int argc, char ** argv) {
         case 'm':
             make_mode = true;
             recursive = true;
+            break;
+        case 'O':
+            use_old_oleans = true;
+            break;
+        case 'W':
+            report_widgets = false;
             break;
         case 'R':
             recursive = true;
@@ -587,8 +598,7 @@ int main(int argc, char ** argv) {
             }
             std::cin.rdbuf(file_in->rdbuf());
         }
-
-        server(num_threads, path.get_path(), env, ios).run();
+        server(num_threads, path.get_path(), env, ios, use_old_oleans, report_widgets).run();
         return 0;
     }
 #endif
@@ -621,6 +631,7 @@ int main(int argc, char ** argv) {
 
         fs_module_vfs vfs;
         module_mgr mod_mgr(&vfs, lt.get_root(), path.get_path(), env, ios);
+        mod_mgr.set_use_old_oleans(use_old_oleans);
         set_global_module_mgr(mod_mgr);
 
         if (run_arg) {
@@ -628,24 +639,26 @@ int main(int argc, char ** argv) {
             if (!mod) throw exception(sstream() << "could not load " << *run_arg);
 
             auto main_env = get(get(mod->m_result).m_loaded_module->m_env);
-            auto main_opts = get(mod->m_result).m_opts;
             set_io_cmdline_args({argv + optind, argv + argc});
-            eval_helper fn(main_env, main_opts, "main");
+            eval_helper fn(main_env, opts, "main");
 
-            type_context_old tc(main_env, main_opts);
-            scope_trace_env scope2(main_env, main_opts, tc);
+            type_context_old tc(main_env, opts);
+            scope_trace_env scope2(main_env, opts, tc);
 
+            bool success = true;
             try {
-                if (fn.try_exec()) {
-                    return 0;
-                } else {
+                if (!fn.try_exec()) {
                     throw exception(sstream() << *run_arg << ": cannot execute main function with type "
-                                              << ios.get_formatter_factory()(main_env, main_opts, tc)(fn.get_type()));
+                                              << ios.get_formatter_factory()(main_env, opts, tc)(fn.get_type()));
                 }
             } catch (std::exception & ex) {
                 std::cerr << ex.what() << std::endl;
-                return 1;
+                success = false;
             }
+            if (fn.get_profiler().enabled()) {
+                fn.get_profiler().get_snapshots().display("main", opts, ios.get_regular_stream());
+            }
+            return success ? 0 : 1;
         }
 
         mod_mgr.set_save_olean(make_mode);

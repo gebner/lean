@@ -346,21 +346,28 @@ name name::get_root() const {
     return n;
 }
 
-std::string name::to_string(char const * sep) const {
+name name::drop_prefix() const {
+    if (m_ptr) {
+        if (m_ptr->m_is_string) {
+            return name(m_ptr->m_str);
+        } else {
+            return name(m_ptr->m_k);
+        }
+    } else {
+        return name();
+    }
+}
+
+std::string name::to_string_unescaped(char const * sep) const {
     std::ostringstream s;
-    imp::display(s, m_ptr, false, sep);
+    display(s, false, sep);
     return s.str();
 }
 
 std::string name::escape(char const * sep) const {
     std::ostringstream s;
-    imp::display(s, m_ptr, true, sep);
+    display(s, true, sep);
     return s.str();
-}
-
-std::ostream & operator<<(std::ostream & out, name const & n) {
-    name::imp::display(out, n.m_ptr, false);
-    return out;
 }
 
 name operator+(name const & n1, name const & n2) {

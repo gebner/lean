@@ -346,10 +346,10 @@ environment open_export_cmd(parser & p, bool open) {
 static environment open_cmd(parser & p) { return open_export_cmd(p, true); }
 static environment export_cmd(parser & p) { return open_export_cmd(p, false); }
 
-static environment local_cmd(parser & p) {
+static environment local_cmd(parser & p, cmd_meta const & meta) {
     if (p.curr_is_token_or_id(get_attribute_tk())) {
         p.next();
-        return local_attribute_cmd(p);
+        return local_attribute_cmd(p, meta);
     } else {
         return local_notation_cmd(p);
     }
@@ -442,7 +442,7 @@ static environment compile_cmd(parser & p) {
     declaration d = p.env().get(n);
     if (!d.is_definition())
         throw parser_error("invalid #compile command, declaration is not a definition", pos);
-    return vm_compile(p.env(), d);
+    return vm_compile(p.env(), p.get_options(), d);
 }
 
 static environment eval_cmd(parser & p) {
@@ -478,7 +478,7 @@ static environment eval_cmd(parser & p) {
     }
 
     name fn_name = "_main";
-    auto new_env = compile_expr(p.env(), fn_name, ls, type, e, pos);
+    auto new_env = compile_expr(p.env(), p.get_options(), fn_name, ls, type, e, pos);
 
     auto out = p.mk_message(p.cmd_pos(), p.pos(), INFORMATION);
     out.set_caption("eval result");
@@ -568,7 +568,9 @@ static environment run_command_cmd(parser & p) {
     expr val             = mk_typed_expr(mk_true(), mk_by(tactic));
     bool check_unassigned = false;
     bool recover_from_errors = true;
-    elaborate(env, opts, "_run_command", mctx, local_context(), val, check_unassigned, recover_from_errors);
+    local_context lctx;
+    lctx.freeze_local_instances(local_instances());
+    elaborate(env, opts, "_run_command", mctx, lctx, val, check_unassigned, recover_from_errors);
     return env;
 }
 
@@ -603,7 +605,7 @@ void init_cmd_table(cmd_table & r) {
                         open_cmd));
     add_cmd(r, cmd_info("export",            "create aliases for declarations", export_cmd));
     add_cmd(r, cmd_info("set_option",        "set configuration option", set_option_cmd));
-    add_cmd(r, cmd_info("#exit",             "exit", exit_cmd));
+    add_cmd(r, cmd_info("#exit",             "exit", exit_cmd, false));
     add_cmd(r, cmd_info("#print",            "print a string or information about an indentifier", print_cmd));
     add_cmd(r, cmd_info("section",           "open a new section", section_cmd));
     add_cmd(r, cmd_info("namespace",         "open a new namespace", namespace_cmd));

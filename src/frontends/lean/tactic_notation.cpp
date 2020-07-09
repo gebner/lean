@@ -190,10 +190,15 @@ static expr parse_interactive_tactic(parser & p, name const & decl_name, name co
             }
             while (p.curr_lbp() >= get_max_prec()) {
                 p.check_break_before();
+                auto pos = p.pos();
                 args.push_back(p.parse_expr(get_max_prec()));
+                if (p.pos() == pos) {
+                    // parse_expr does not necessarily consume input if there is a syntax error
+                    break;
+                }
             }
             p.check_break_before();
-        } catch (break_at_pos_exception) {
+        } catch (break_at_pos_exception &) {
             throw;
         } catch (...) {
             p.check_break_before();
@@ -270,7 +275,7 @@ struct parse_tactic_fn {
             }
         } else if (is_curr_exact_shortcut(m_p)) {
             expr arg = parse_qexpr();
-            r = m_p.mk_app(m_p.save_pos(mk_constant(get_interactive_tactic_full_name(m_tac_class, "exact")), pos), arg, pos);
+            r = m_p.mk_app(m_p.save_pos(mk_constant(get_interactive_tactic_full_name(m_tac_class, "refine")), pos), arg, pos);
             if (m_use_istep) r = mk_tactic_istep(m_p, r, pos, pos, m_tac_class);
         } else {
             r = m_p.parse_expr();
@@ -350,15 +355,23 @@ struct parse_tactic_fn {
         return r;
     }
 
-    expr parse_andthen(expr left) {
+    expr parse_andthen(expr left, bool save_info) {
         auto start_pos = m_p.pos();
+        optional<pos_info> pos;
         expr r = left;
-        while (m_p.curr_is_token(get_semicolon_tk())) {
-            m_p.next();
-            expr curr = parse_elem(false);
-            if (m_p.curr_is_token(get_orelse_tk()))
-                curr = parse_orelse(curr);
-            r = andthen(r, curr, start_pos);
+        try {
+            while (m_p.curr_is_token(get_semicolon_tk())) {
+                m_p.next();
+                pos = m_p.pos();
+                expr curr = parse_elem(save_info);
+                if (m_p.curr_is_token(get_orelse_tk()))
+                    curr = parse_orelse(curr);
+                r = andthen(r, curr, start_pos);
+            }
+        } catch (break_at_pos_exception & ex) {
+            if (save_info && pos)
+                ex.report_goal_pos(*pos);
+            throw;
         }
         return r;
     }
@@ -366,7 +379,7 @@ struct parse_tactic_fn {
     expr operator()(bool save_info = true) {
         expr r = parse_elem(save_info);
         if (m_p.curr_is_token(get_semicolon_tk()))
-            return parse_andthen(r);
+            return parse_andthen(r, save_info);
         else if (m_p.curr_is_token(get_orelse_tk()))
             return parse_orelse(r);
         else

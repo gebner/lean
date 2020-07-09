@@ -26,7 +26,6 @@ Author: Daniel Selsam, Leonardo de Moura
 #include "library/num.h"
 #include "library/idx_metavar.h"
 #include "library/util.h"
-#include "library/norm_num.h"
 #include "library/attribute_manager.h"
 #include "library/defeq_canonizer.h"
 #include "library/relation_manager.h"
@@ -149,7 +148,7 @@ simp_lemmas simplify_core_fn::add_to_slss(simp_lemmas const & _slss, buffer<expr
     for (unsigned i = 0; i < ls.size(); i++) {
         expr const & l = ls[i];
         try {
-            slss = add(m_ctx, slss, mlocal_name(l), m_ctx.infer(l), l, LEAN_DEFAULT_PRIORITY);
+            slss = add(m_ctx, slss, mlocal_name(l), m_ctx.infer(l), l, false, LEAN_DEFAULT_PRIORITY);
             lean_simp_trace(m_ctx, name({"simplify", "context"}),
                             tout() << mlocal_name(l) << " : " << m_ctx.infer(l) << "\n";);
         } catch (exception & e) {}
@@ -492,12 +491,18 @@ simp_result simplify_core_fn::rewrite(expr const & e) {
     }
 
     for (simp_lemma const & lemma : *srs) {
-        simp_result r = rewrite(e, lemma);
-        if (!is_eqp(r.get_new(), e)) {
+        try {
+            simp_result r = rewrite(e, lemma);
+            if (!is_eqp(r.get_new(), e)) {
+                lean_simp_trace_d(m_ctx, name({"simplify", "rewrite"}),
+                                tout() << "[" << lemma.get_id() << "]: "
+                                << e << " ==> " << r.get_new() << "\n";);
+                return r;
+            }
+        } catch (ext_exception & ex) {
             lean_simp_trace_d(m_ctx, name({"simplify", "rewrite"}),
-                              tout() << "[" << lemma.get_id() << "]: "
-                              << e << " ==> " << r.get_new() << "\n";);
-            return r;
+                tout() << "[" << lemma.get_id() << "]: exception: "
+                << ex << "\n";);
         }
     }
 
@@ -823,7 +828,10 @@ bool simplify_core_fn::simplify_constructor_eq_constructor(simp_result & r) {
             simp_result new_r(new_rhs, inj_eq_pr);
             r = join_eq(m_ctx, r, new_r);
             return true;
-        } catch (exception &) {
+        } catch (ext_exception & ex) {
+            lean_simp_trace(m_ctx, name({"simplify"}),
+                tout() << "cannot simplify constructor equality: exception: "
+                << ex << "\n";);
             return false;
         }
     }
@@ -1236,7 +1244,9 @@ meta constant simplify
 */
 vm_obj tactic_simplify(vm_obj const & slss, vm_obj const & u, vm_obj const & e, vm_obj const & c, vm_obj const & rel,
                        vm_obj const & prove, vm_obj const & _s) {
-    tactic_state s = tactic::to_state(_s);
+    tactic_state s0 = tactic::to_state(_s);
+    auto s = freeze_local_instances(s0);
+    bool was_frozen = is_eqp(s, s0);
     try {
         simp_config cfg(c);
         tactic_state_context_cache cache(s);
@@ -1247,6 +1257,7 @@ vm_obj tactic_simplify(vm_obj const & slss, vm_obj const & u, vm_obj const & e, 
         if (!cfg.m_fail_if_unchanged || result.get_new() != to_expr(e)) {
             result = finalize(ctx, to_name(rel), result);
             tactic_state new_s = set_dcs(s, dcs);
+            if (!was_frozen) new_s = unfreeze_local_instances(new_s);
             return tactic::mk_success(mk_vm_pair(to_obj(result.get_new()), to_obj(result.get_proof())), new_s);
         } else {
             return tactic::mk_exception("simplify tactic failed to simplify", s);

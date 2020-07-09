@@ -1,3 +1,391 @@
+3.17.1c (8 July 2020)
+---------------------
+
+Features:
+- Reuse type-class cache (#383)
+
+Bug fixes:
+- Info error for commands directly after imports (#386, fixes #382)
+
+3.17.0c (6 July 2020)
+---------------------
+
+Features:
+- Refactor widgets to use hooks (#363, #369)
+- `component.with_effects` (#370)
+- Add "copy text" effect. (#375)
+
+Bug fixes:
+- Add margin to local const names in tactic state (#365)
+- Prevent segfault in `apply` (#373, fixes #372)
+- Fix address incorrect issue in `pp_tagged` (#371)
+- Abort if no input consumed in `module_parser` (#377, fixes #374)
+- Do not unify `(1 : ℕ)` with `(1 : ℤ)` (#376, fixes #362)
+
+Changes:
+- Fix vacuous assumptions in nat lemmas (#366)
+- Remove `has_neg` instance for `set` (#367)
+- Mark `dif_ctx_congr` as `@[congr]` (#378)
+
+Server protocol changes:
+- The response of the `widget_event` request may now contain effects.
+
+3.16.5c (25 June 2020)
+----------------------
+
+Features:
+- Add comment-like string blocks (#352)
+- Add widgets to trace messages (#355)
+- Show case tags in goal widget (#357)
+
+Bug fixes:
+- Handle exceptions in `ts_clone` (#350)
+- Support `sorry #` (#356)
+
+Server protocol changes:
+- The (Lean error) messages returned by the server may now contain an additional `"widget"` field.
+
+3.16.4c (22 June 2020)
+----------------------
+
+Features:
+- Use `tactic_state_context_cache` more (#347)
+- Goal widget: collect locals with the same type and local filtering (#346)
+
+Bug fixes:
+- Fix error message in `cases`
+
+3.16.3c (18 June 2020)
+----------------------
+
+Bug fixes:
+- Remove as-is annotations (#338, fixes #334)
+- Handle EOF in `skip_to_pos` (#342, fixes #85)
+- Fix holes with space in name (#343)
+
+Features:
+- Add profiling for user attributes (#328)
+- Profile user commands (#329)
+- Support `lean --profile --run` (#337)
+- Add `parser.{any_char,digit,nat}` (#331)
+- Cache type-class searches w/o mvars (#332)
+
+Changes:
+- Put `is_strict_total_order` in `Prop` (#327)
+- Remove redundant lemmas (#321)
+
+3.16.2c (12 June 2020)
+----------------------
+
+Bug fixes:
+- Stop scanning after `#exit` (#318, fixes #309)
+- Allow `variables (A B : Type*)` (#319, fixes #29)
+- Escape names using French quotes by default (#320, fixes #114)
+- Fix `lean --deps` (#323)
+- Selection disco issue in tactic state widget (#324)
+
+Features:
+- Add `get_widget` server request (#314)
+- Allow namespaces inside sections (#317, fixes #315)
+
+Server protocol changes:
+- The `info` request no longer returns the widget HTML.  Instead it returns an `id` field in addition to `line` and `column`.  The `get_widget` request now returns the HTML.  The `widget_event` request also requires an `id` argument.
+
+3.16.1c (10 June 2020)
+----------------------
+
+Bug fixes:
+- Add key to `li` in `tactic_view_component` (#311)
+- Fix widget updates in `by ...` (#312)
+
+3.16.0c (10 June 2020)
+----------------------
+
+Features:
+- Add docstrings for `cc_state` primitives (#295)
+- Use `BUILD_TESTING` to enable or disable building tests (#292)
+- Additional meta constants (#294)
+- Add `@[pp_nodot]` (#297)
+- Make widget look more like current tactic state (#303)
+- Show term-proof goals as widgets (#304, #306)
+- Add holes for underscores (#307)
+
+Bug fixes:
+- Fix case of header files for building on case-sensitive filesystems (#290)
+- Remove useless setting of `_GLIBCXX_USE_CXX11_ABI` with MinGW (#293)
+- Fix guards to make it possible to build for BSD systems (#291)
+- Rename `tactic.tactic.run_simple` -> `tactic.run_simple` (#298)
+- Use instance instead of semireducible transparency in type-class synthesis (#300)
+- Widget events contain position (#301)
+- Server: do not cancel info queries, etc. (#308)
+
+Changes:
+- Lower precedence of unary `-` (#287)
+
+3.15.0c (28 May 2020)
+---------------------
+
+Features:
+  - Support for structured formatting using `eformat` (#276)
+  - Show goals for subterms (#275, #277)
+  - Freeze instances in the simplifier (#273)
+  - Support local attribute with docstring (#271)
+  - VM objects may be hashed (#262)
+  - `expr.coord` and `expr.address` (#260)
+  - Add `list.map_with_index` to core library (#259)
+  - Add `expr.instantiate_vars_core` (#261)
+  - Don't check levels on meta inductives (#263)
+
+Bug fixes:
+  - Preserve VM code indexes across instances (#283)
+  - Fixes a VM environment cache not updating (#280)
+  - Do not use fseek in io.fs.read (#278)
+  - Dot-notation pretty-printing (#269)
+
+Changes:
+  - Elaborate structure instances left-to-right (#282)
+  - Remove duplicated namespaces (#267)
+  - Remove `(|` and `|)` aliases (#265)
+
+### Special feature: widgets
+
+#### Lean API
+- Add widgets. This is an HTML-based UI framework for generating html within lean to enable interactive UI
+  in the infoview in vscode and on the web.
+- Add `tactic.save_widget: pos → widget.component tactic_state string → tactic unit`. Examples of widgets can be found in `library/widget/examples.lean`.
+  Widgets are registered in exactly the same way as `save_info_thunk` saves text.
+- Use the `#html` command to view `html empty` or `component tactic_state string` widgets.
+- Add a 'structured format' pretty printing system `tactic_state.pp_tagged : tactic_state → expr → eformat`.
+  `eformat := tagged_format (expr.address × expr)`.
+  `tagged_format α : Type` performs the same role as `format` except that there is a special constructor
+  `tag : α → tagged_format → tagged_format` that contains information about
+  which subexpression caused this string to be rendered.
+  This is used to implement a widget which allows the user to hover over a pretty printed string
+  and view information about the subexpressions that build up the original expression.
+  For example, this lets you view types of pretty printed expressions and view implicit arguments.
+- Add numerous docstrings
+
+#### Frontend/library changes
+
+- Overhaul pretty printer so that it can
+  provide information about expression addresses.
+  This required making it templated to output `T` instead of `format`.
+  Currently `T` may be instantiated with `lean::format` or `lean::eformat`.
+  See `src/library/vm/vm_eformat` and
+- Info manager now supports widgets.
+- Server `info` response may now include a `"widget"` field on the returned `"record"` json.
+- Server has a new command `widget_event` to enable interactive widgets
+- The main code for widgets can be found in `src/frontends/widget.(h|cpp)`.
+- VM objects can now be hashed, with the exception of some `vm_external`s which hash to zero.
+  This is needed to verify the identity of components in the widget reconciliation engine.
+- server has an option `-no-widgets` or `-W` for turning off widget reporting. This is used in the interactive tests.
+
+v3.14.0c (20 May 2020)
+----------------------
+
+Features:
+ - Coercions also trigger if the types have metavariables (#251)
+ - Better error message on missing imports (#253)
+ - Add `add_eqn_lemma` function (#254)
+
+v3.13.2c (18 May 2020)
+----------------------
+
+Fixes:
+ - Fix `olean_doc_strings` (#249)
+
+v3.13.1c (17 May 2020)
+----------------------
+
+Fixes:
+ - Protect and rename some `nat` and `int` lemmas that are superseded in mathlib (#229)
+
+v3.13.0c (16 May 2020)
+----------------------
+
+Features:
+ - use persistent data structures, to improve performance
+   of (module) docstrings (#241)
+ - cache constructed `simp_lemma` objects (#234)
+ - support `local attribute [-instance]` (#240)
+ - show goal after `;` (#239)
+ - `==`: compare id (#238)
+ - mark deps of fixed as fixed (#237)
+
+
+Changes:
+ - Most of `library/init/algebra/*` has been deleted,
+   as part of moving the algebraic hierarchy to mathlib (#229)
+
+v3.12.0c (14 May 2020)
+----------------------
+
+Features:
+  - Tactic combinators with informative results (#212)
+  - `has_singleton` is a new typeclass (#217)
+  - Add instances for `has_repr name`, `has_repr case_tag`, and `has_to_format case_tag` (#230)
+
+Changes:
+  - `library/init/function`: use dot notation, add some docstrings (#216)
+  - `tactic.all_goals` is now called `tactic.all_goals'`, etc. (#212)
+  - `norm_num` is removed (#224)
+  - Parse `{a,b,c}` as right associative (#153)
+  - Refactor case tags (#228)
+  - Enable `pp.generalized_field_notation` by default (#227)
+
+v3.11.0c (8 May 2020)
+---------------------
+
+Feature:
+  - Do not unfold irreducible definitions in unification (#211)
+  - Instantiate metavariables in `rw` (#213)
+
+Bug fixes:
+  - Fix docstring of tactic.interactive.rename (#210)
+
+v3.10.0c (2 May 2020)
+---------------------
+
+Features:
+  - `by calc ...` is now equivalent to `by refine calc ...` (#203)
+  - Flag to use out-of-date oleans (#208)
+  - Order notation by priority in pretty-printer (#207)
+  - Improve congruence lemmas for `coe_fn` (#209)
+  - Port `rename` tactic from mathlib (#205)
+
+Bug fixes:
+  - `simp [← foo]` avoids looping if `foo` is already in the simp set (#198)
+
+Changes:
+  - `init.category` has been renamed to `init.control` (#202)
+  - `string.has_decidable_eq` is now implemented by foot (#204)
+
+v3.9.0c (19 April 2020)
+----------------------
+
+Features:
+  - The VM supports string literals (#185, #187)
+  - Imports are parsed in an indentation-sensitive way. Compare:
+    ```lean
+    import foo
+      bar
+    open_locale classical -- runs user command
+    ```
+    and
+    ```lean
+    import foo
+      bar
+      open_locale classical -- imports open_locale and classical modules
+    ```
+    This makes it easier to run user commands at the start of files. (#188)
+  - The parser now has access to the local scope and can parse expressions as patterns (#192)
+  - `mmap` and `map` functions for `d_array`, `array`, and `buffer` (#190)
+
+Bug fixes:
+  - The order of emetas has been reversed in `simp_lemmas` (#183)
+  - Universe parameters are collected from anonymous instances (#189)
+  - Nested comment parsing in doc strings was fixed (#191)
+
+Changes:
+  - The performance of `array.map` has been greatly improved (#186)
+  - A frequently-violated assertion was removed from the elaborator (#194)
+
+v3.8.0c (9 April 2020)
+----------------------
+
+Features:
+  - The VM implementation of functions can be overriden (#48)
+  - More and better doc strings for the core library (#166)
+
+Bug fixes:
+  - `simp` instantiates the metavariables in the goal before simplifying (#170)
+  - `app_builder` is more robust (#165)
+  - Assertion violation in `simp_inductive` (#173)
+
+Changes:
+  - `expr.subst` constructs an application if the left expression is not a lambda (#180)
+  - `if_simp_congr` is removed, simp now produces the correct decidability instance when simplifying if-then-else (#159)
+  - `float.{ceil,floor,trunc,round}` now return integers (#176)
+  - `default` is now an export (#161)
+  - `prod.map` and `function.uncurry` don't use pattern matching (#161)
+  - The type argument in `has_zero.zero` and `has_one.one` is implicit (#169)
+  - Inductives/structures/structure fields now default to implicit arguments (#175)
+  - `add_lt_add_left` and `mul_le_mul*` fields are removed (#167)
+  - `ordered_comm_group` is renamed to `ordered_add_comm_group` (#174)
+
+v3.7.2c (20 Mar 2020)
+---------------------
+
+Bug fix:
+  - Open .oleans in binary mode on Windows (#155)
+
+v3.7.1c (16 Mar 2020)
+---------------------
+
+Bug fix:
+  - Allow loading standalone .olean files (#150)
+
+v3.7.0c (13 Mar 2020)
+---------------------
+
+Features:
+  - `simp` can rewrite subsingletons (#134)
+  - Files are recompiled based on hash code instead of timestamp (#140)
+  - `mk_protected`, `add_protected`, `is_protected` functions (#138)
+  - `has_attribute` and `copy_attribute` now expliclity support non-persistent attributes (#66)
+
+Bug fixes:
+  - Fix the implementation of the instance `has_coe (tactic α) (parser α)` (#136 and #147)
+  - `simp` catches exception (e.g. from type class resolution, #142)
+  - `(+) = (λ x y, x + y)` unifies now (#141)
+
+Changes:
+  - `apply` solves instances in forward order (#67)
+  - Type class resolution solves instance arguments from right-to-left (#139)
+  - Type class resolution skips assigned metavariables (#135)
+  - Signature of `has_attribute` and `copy_attribute` has changed (#66)
+
+v3.6.1c (2 Mar 2020)
+--------------------
+
+Bug fix:
+  - Correctly reference the community fork of Lean in `leanpkg.toml` (#131)
+
+v3.6.0c (26 Feb 2020)
+---------------------
+
+Features:
+ - Remove `discrete_field` (#119)
+ - Remove simp attribute from `sub_eq_add_neg` (#117)
+ - Replace `insert` definition by export (#115)
+ - Remove simp attribute from `add_comm` and `add_left_comm` (#65)
+ - simp with reversed lemmas: `simp ← foo` (#100)
+ - Allow nested block comments in docstrings (#113)
+
+Bug fixes:
+ - Include mathlib fixes to `wf_tacs` (#121)
+ - Typos in docstrings (#125)
+
+Changes:
+ - `discrete_field` is now just `field` (#119)
+ - `add_comm`, `add_left_comm`, and `sub_eq_add_neg` are no longer simp lemmas
+ - `insert` is no longer a definition
+ - Nested block comments are now allowed in docstrings
+
+v3.5.1c (4 Feb 2020)
+--------------------
+
+Features:
+- Allow `change` to be used to rename bound variables (#96)
+- Annotate pretty-printed output with full constant names (#89)
+- Import modules from meta code (#88)
+- Make `add_interactive` copy the doc string (#97)
+- Avoid version warning for external Leans in leanpkg (#106)
+
+Bugfixes:
+- Force tactic type in `run_cmd` (#103)
+- `?m_1` and `(λ x, ?m_1) y` should be definitionally equal (#107)
+
 v3.5.0c (26 Dec 2019)
 --------------
 

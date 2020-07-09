@@ -357,7 +357,14 @@ void scanner::read_doc_block_core() {
         check_not_eof("unexpected end of documentation block");
         uchar c = curr();
         next();
-        if (c == '-') {
+        if (c == '/') {
+            if (curr() == '-') {
+                m_buffer += '/';
+                m_buffer += '-';
+                next();
+                read_comment_block_doc();
+            }
+        } else if (c == '-') {
             if (curr() == '/') {
                 next();
                 return;
@@ -375,6 +382,42 @@ auto scanner::read_doc_block() -> token_kind {
 auto scanner::read_mod_doc_block() -> token_kind {
     read_doc_block_core();
     return token_kind::ModDocBlock;
+}
+
+token_kind scanner::read_string_block() {
+    m_buffer.clear();
+    unsigned nesting = 0;
+    while (true) {
+        uchar c = curr();
+        check_not_eof("unexpected end of string block");
+        next();
+        if (c == '/') {
+            if (curr() == '-') {
+                m_buffer += '/';
+                c = '-';
+                next();
+                nesting++;
+            }
+        } else if (c == '-') {
+            if (curr() == '/') {
+                m_buffer += '-';
+                c = '/';
+                next();
+                if (nesting) nesting--;
+            }
+        } else if (c == '"' && nesting == 0) {
+            if (curr() == '-') {
+                c = '-';
+                next();
+                if (curr() == '/') {
+                    next();
+                    return token_kind::String;
+                }
+                m_buffer += '"';
+            }
+        }
+        m_buffer += c;
+    }
 }
 
 void scanner::read_comment_block() {
@@ -396,6 +439,33 @@ void scanner::read_comment_block() {
                     return;
             }
         }
+    }
+}
+
+void scanner::read_comment_block_doc() {
+    unsigned nesting = 1;
+    while (true) {
+        uchar c = curr();
+        check_not_eof("unexpected end of comment block");
+        next();
+        if (c == '/') {
+            if (curr() == '-') {
+                m_buffer += '/';
+                c = '-';
+                next();
+                nesting++;
+            }
+        } else if (c == '-') {
+            if (curr() == '/') {
+                m_buffer += '-';
+                c = '/';
+                next();
+                nesting--;
+                if (nesting == 0)
+                    return;
+            }
+        }
+        m_buffer += c;
     }
 }
 
@@ -619,6 +689,7 @@ static name * g_begin_comment_tk        = nullptr;
 static name * g_begin_comment_block_tk  = nullptr;
 static name * g_begin_doc_block_tk      = nullptr;
 static name * g_begin_mod_doc_block_tk  = nullptr;
+static name * g_begin_string_block_tk   = nullptr;
 static name * g_tick_tk                 = nullptr;
 
 void initialize_scanner() {
@@ -626,6 +697,7 @@ void initialize_scanner() {
     g_begin_comment_block_tk = new name("/-");
     g_begin_doc_block_tk     = new name("/--");
     g_begin_mod_doc_block_tk = new name("/-!");
+    g_begin_string_block_tk  = new name("/-\"");
     g_tick_tk                = new name("'");
 }
 
@@ -634,6 +706,7 @@ void finalize_scanner() {
     delete g_begin_comment_block_tk;
     delete g_begin_doc_block_tk;
     delete g_begin_mod_doc_block_tk;
+    delete g_begin_string_block_tk;
     delete g_tick_tk;
 }
 
@@ -669,6 +742,8 @@ auto scanner::scan(environment const & env) -> token_kind {
                         read_single_line_comment();
                     else if (n == *g_begin_comment_block_tk)
                         read_comment_block();
+                    else if (n == *g_begin_string_block_tk)
+                        return read_string_block();
                     else if (n == *g_begin_doc_block_tk)
                         return read_doc_block();
                     else if (n == *g_begin_mod_doc_block_tk)
@@ -701,19 +776,18 @@ scanner::scanner(std::istream & strm, char const * strm_name):
     lean_assert(pos_info(get_line(), get_pos()) == pos_info(1, 0));
 }
 
-scanner::scanner(std::istream & strm, char const * strm_name, pos_info const & pos) :
-        scanner(strm, strm_name) {
-    skip_to_pos(pos);
-}
-
-void scanner::skip_to_pos(pos_info const & pos) {
-    for (unsigned line_no = 1; line_no < pos.first; line_no++)
+bool scanner::skip_to_pos(pos_info const & pos) {
+    for (unsigned line_no = 1; line_no < pos.first; line_no++) {
+        if (m_curr == Eof) return false;
         fetch_line();
+    }
     m_line = m_sline;
-    while (static_cast<unsigned>(m_upos) < pos.second)
+    while (static_cast<unsigned>(m_upos) < pos.second) {
+        if (m_curr == Eof) return false;
         next();
+    }
     m_pos = m_upos; // we assume that the argument is the start of a token
-    lean_assert(pos == pos_info(get_line(), get_pos()));
+    return pos == pos_info(get_line(), get_pos());
 }
 
 std::ostream & operator<<(std::ostream & out, token_kind k) {

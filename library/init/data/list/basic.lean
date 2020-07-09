@@ -116,6 +116,15 @@ def reverse : list α → list α :=
 | _       []      := []
 | (x::xs) (y::ys) := f x y :: map₂ xs ys
 
+def map_with_index_core (f : ℕ → α → β) : ℕ → list α → list β
+| k []      := []
+| k (a::as) := f k a::(map_with_index_core (k+1) as)
+
+/-- Given a function `f : ℕ → α → β` and `as : list α`, `as = [a₀, a₁, ...]`, returns the list
+`[f 0 a₀, f 1 a₁, ...]`. -/
+def map_with_index (f : ℕ → α → β) (as : list α) : list β :=
+map_with_index_core f 0 as
+
 def join : list (list α) → list α
 | []        := []
 | (l :: ls) := l ++ join ls
@@ -139,6 +148,18 @@ def partition (p : α → Prop) [decidable_pred p] : list α → list α × list
 def drop_while (p : α → Prop) [decidable_pred p] : list α → list α
 | []     := []
 | (a::l) := if p a then drop_while l else a::l
+
+/-- `after p xs` is the suffix of `xs` after the first element that satisfies
+  `p`, not including that element.
+
+  ```lean
+  after      (eq 1)       [0, 1, 2, 3] = [2, 3]
+  drop_while (not ∘ eq 1) [0, 1, 2, 3] = [1, 2, 3]
+  ```
+-/
+def after (p : α → Prop) [decidable_pred p] : list α → list α
+| [] := []
+| (x :: xs) := if p x then xs else after xs
 
 def span (p : α → Prop) [decidable_pred p] : list α → list α × list α
 | []      := ([], [])
@@ -207,6 +228,11 @@ if a ∈ l then l else a :: l
 
 instance [decidable_eq α] : has_insert α (list α) :=
 ⟨list.insert⟩
+
+instance : has_singleton α (list α) := ⟨λ x, [x]⟩
+
+instance [decidable_eq α] : is_lawful_singleton α (list α) :=
+⟨λ x, show (if x ∈ ([] : list α) then [] else [x]) = [x], from if_neg not_false⟩
 
 protected def union [decidable_eq α] (l₁ l₂ : list α) : list α :=
 foldr insert l₂ l₁

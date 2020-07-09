@@ -92,9 +92,7 @@ static bool try_instance(type_context_old & ctx, expr const & meta, tactic_state
 
 bool synth_instances(type_context_old & ctx, buffer<expr> const & metas, buffer<bool> const & is_instance,
                      tactic_state const & s, vm_obj * out_error_obj, char const * tac_name) {
-    unsigned i = is_instance.size();
-    while (i > 0) {
-        --i;
+    for (unsigned i = 0; i < is_instance.size(); i++) {
         if (!is_instance[i]) continue;
         if (!try_instance(ctx, metas[i], s, out_error_obj, tac_name))
             return false;
@@ -190,6 +188,13 @@ static optional<tactic_state> apply(type_context_old & ctx, expr e, apply_cfg co
     buffer<bool> is_instance;
     for (unsigned i = 0; i < num_e_t; i++) {
         e_type    = ctx.relaxed_whnf(e_type);
+        if (!is_binding(e_type)) {
+            // Sometimes the type context can reduce terms when they're
+            // instantiated with local constants, but not when they're
+            // instantiated with metavariables:
+            // https://github.com/leanprover-community/lean/issues/372
+            break;
+        }
         expr meta = ctx.mk_metavar_decl(lctx, binding_domain(e_type));
         is_instance.push_back(binding_info(e_type).is_inst_implicit());
         metas.push_back(meta);

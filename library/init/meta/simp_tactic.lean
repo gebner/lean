@@ -43,9 +43,9 @@ If your lemma is not being added, you can see the reasons by setting `set_option
 - `LHS` should not occur within a hypothesis `hᵢ`.
 
  -/
-meta constant simp_lemmas.add : simp_lemmas → expr → tactic simp_lemmas
+meta constant simp_lemmas.add (s : simp_lemmas) (e : expr) (symm : bool := false) : tactic simp_lemmas
 /-- Add a simplification lemma by it's declaration name. See `simp_lemmas.add` for more information.-/
-meta constant simp_lemmas.add_simp : simp_lemmas → name → tactic simp_lemmas
+meta constant simp_lemmas.add_simp (s : simp_lemmas) (id : name) (symm : bool := false) : tactic simp_lemmas
 /-- Adds a congruence simp lemma to simp_lemmas.
 A congruence simp lemma is a lemma that breaks the simplification down into separate problems.
 For example, to simplify `a ∧ b` to `c ∧ d`, we should try to simp `a` to `c` and `b` to `d`.
@@ -58,8 +58,21 @@ lemma and_congr (h₁ : a ↔ c) (h₂ : b ↔ d) : (a ∧ b) ↔ (c ∧ d) := .
 -/
 meta constant simp_lemmas.add_congr : simp_lemmas → name → tactic simp_lemmas
 
+/-- Add expressions to a set of simp lemmas using `simp_lemmas.add`.
+
+  This is the new version of `simp_lemmas.append`,
+  which also allows you to set the `symm` flag.
+-/
+meta def simp_lemmas.append_with_symm (s : simp_lemmas) (hs : list (expr × bool)) :
+  tactic simp_lemmas :=
+hs.mfoldl (λ s h, simp_lemmas.add s h.fst h.snd) s
+/-- Add expressions to a set of simp lemmas using `simp_lemmas.add`.
+
+  This is the backwards-compatibility version of `simp_lemmas.append_with_symm`,
+  and sets all `symm` flags to `ff`.
+-/
 meta def simp_lemmas.append (s : simp_lemmas) (hs : list expr) : tactic simp_lemmas :=
-hs.mfoldl simp_lemmas.add s
+hs.mfoldl (λ s h, simp_lemmas.add s h ff) s
 
 /-- `simp_lemmas.rewrite s e prove R` apply a simplification lemma from 's'
 
@@ -105,21 +118,23 @@ do num_reverted : ℕ ← revert h,
 
 /-- `get_eqn_lemmas_for deps d` returns the automatically generated equational lemmas for definition d.
    If deps is tt, then lemmas for automatically generated auxiliary declarations used to define d are also included. -/
-meta constant get_eqn_lemmas_for : bool → name → tactic (list name)
+meta def get_eqn_lemmas_for (deps : bool) (d : name) : tactic (list name) := do
+env ← get_env,
+pure $ if deps then env.get_ext_eqn_lemmas_for d else env.get_eqn_lemmas_for d
 
 structure dsimp_config :=
 (md                        := reducible) -- reduction mode: how aggressively constants are replaced with their definitions.
 (max_steps : nat           := simp.default_max_steps) -- The maximum number of steps allowed before failing.
-(canonize_instances : bool := tt) -- [TODO] docs 
-(single_pass : bool        := ff) -- [TODO] Does this mean that _each_ simp-lemma can only be used once?
-(fail_if_unchanged         := tt) -- Don't throw if simp didn't do anything.
+(canonize_instances : bool := tt) -- See the documentation in `src/library/defeq_canonizer.h`
+(single_pass : bool        := ff) -- Visit each subterm no more than once.
+(fail_if_unchanged         := tt) -- Don't throw if dsimp didn't do anything.
 (eta                       := tt) -- allow eta-equivalence: `(λ x, F $ x) ↝ F`
 (zeta : bool               := tt) -- do zeta-reductions: `let x : a := b in c ↝ c[x/b]`.
 (beta : bool               := tt) -- do beta-reductions: `(λ x, E) $ (y) ↝ E[x/y]`.
-(proj : bool               := tt) -- reduce projections: `⟨a,b⟩.1 ↝ a` [TODO] I think?
+(proj : bool               := tt) -- reduce projections: `⟨a,b⟩.1 ↝ a`.
 (iota : bool               := tt) -- reduce recursors for inductive datatypes: eg `nat.rec_on (succ n) Z R ↝ R n $ nat.rec_on n Z R`
 (unfold_reducible          := ff) -- if tt, definitions with `reducible` transparency will be unfolded (delta-reduced)
-(memoize                   := tt) -- [TODO] what is being memoised?
+(memoize                   := tt) -- Perform caching of dsimps of subterms.
 end tactic
 
 /-- (Definitional) Simplify the given expression using *only* reflexivity equality lemmas from the given set of lemmas.
@@ -163,9 +178,9 @@ meta def get_simp_lemmas_or_default : option simp_lemmas → tactic simp_lemmas
 | (some s) := return s
 
 meta def dsimp_target (s : option simp_lemmas := none) (u : list name := []) (cfg : dsimp_config := {}) : tactic unit :=
-do 
-  s ← get_simp_lemmas_or_default s, 
-  t ← target >>= instantiate_mvars, 
+do
+  s ← get_simp_lemmas_or_default s,
+  t ← target >>= instantiate_mvars,
   s.dsimplify u t cfg >>= unsafe_change
 
 meta def dsimp_hyp (h : expr) (s : option simp_lemmas := none) (u : list name := []) (cfg : dsimp_config := {}) : tactic unit :=
@@ -246,7 +261,7 @@ revert_and_transform (λ e, unfold_projs e cfg) h
 
 structure simp_config :=
 (max_steps : nat           := simp.default_max_steps)
-(contextual : bool         := ff) -- [TODO] what does this mean?
+(contextual : bool         := ff)
 (lift_eq : bool            := tt)
 (canonize_instances : bool := tt)
 (canonize_proofs : bool    := ff)
@@ -274,7 +289,7 @@ meta constant simplify (s : simp_lemmas) (to_unfold : list name := []) (e : expr
                        (discharger : tactic unit := failed) : tactic (expr × expr)
 
 meta def simp_target (s : simp_lemmas) (to_unfold : list name := []) (cfg : simp_config := {}) (discharger : tactic unit := failed) : tactic unit :=
-do t ← target,
+do t ← target >>= instantiate_mvars,
    (new_t, pr) ← simplify s to_unfold t cfg `eq discharger,
    replace_target new_t pr
 
@@ -284,7 +299,7 @@ do when (expr.is_local_constant h = ff) (fail "tactic simp_at failed, the given 
    (h_new_type, pr) ← simplify s to_unfold htype cfg `eq discharger,
    replace_hyp h h_new_type pr
 
-/-- 
+/--
 `ext_simplify_core a c s discharger pre post r e`:
 
 - `a : α` - initial user data
@@ -295,7 +310,7 @@ do when (expr.is_local_constant h = ff) (fail "tactic simp_at failed, the given 
   + arguments:
     - `a` is the current user data
     - `s` is the updated set of lemmas if 'contextual' is `tt`,
-    - `r` is the simplification relation being used, 
+    - `r` is the simplification relation being used,
     - `p` is the "parent" expression (if there is one).
     - `e` is the current subexpression in question.
   + if it succeeds the result is `(new_a, new_e, new_pr, flag)` where
@@ -358,7 +373,7 @@ meta def simp_intros_aux (cfg : simp_config) (use_hyps : bool) (to_unfold : list
       assertv_core h_d.local_pp_name new_d h_new_d,
       clear h_d,
       h_new   ← intro1,
-      new_S ← if use_hyps then mcond (is_prop new_d) (S.add h_new) (return S)
+      new_S ← if use_hyps then mcond (is_prop new_d) (S.add h_new ff) (return S)
               else return S,
       simp_intros_aux new_S use_ns ns.tail
     }
@@ -391,7 +406,7 @@ do (lhs, rhs)     ← target >>= match_eq,
 
 meta def to_simp_lemmas : simp_lemmas → list name → tactic simp_lemmas
 | S []      := return S
-| S (n::ns) := do S' ← S.add_simp n, to_simp_lemmas S' ns
+| S (n::ns) := do S' ← S.add_simp n ff, to_simp_lemmas S' ns
 
 meta def mk_simp_attr (attr_name : name) (attr_deps : list name := []) : command :=
 do let t := `(user_attribute simp_lemmas),
@@ -410,7 +425,7 @@ do let t := `(user_attribute simp_lemmas),
    let n := mk_simp_attr_decl_name attr_name,
    add_decl (declaration.defn n [] t v reducibility_hints.abbrev ff),
    attribute.register n
-/-- 
+/--
 ### Example usage:
 ```lean
 -- make a new simp attribute called "my_reduction"
@@ -494,7 +509,7 @@ meta structure simp_all_entry :=
 (s        : simp_lemmas) -- simplification lemmas for simplifying new_type
 
 private meta def update_simp_lemmas (es : list simp_all_entry) (h : expr) : tactic (list simp_all_entry) :=
-es.mmap $ λ e, do new_s ← e.s.add h, return {s := new_s, ..e}
+es.mmap $ λ e, do new_s ← e.s.add h ff, return {s := new_s, ..e}
 
 /- Helper tactic for `init`.
    Remark: the following tactic is quadratic on the length of list expr (the list of non dependent propositions).
@@ -503,7 +518,7 @@ private meta def init_aux : list expr → simp_lemmas → list simp_all_entry �
 | []      s r := return (s, r)
 | (h::hs) s r := do
   new_r  ← update_simp_lemmas r h,
-  new_s  ← s.add h,
+  new_s  ← s.add h ff,
   h_type ← infer_type h,
   init_aux hs new_s (⟨h, h_type, none, s⟩::new_r)
 
@@ -551,7 +566,7 @@ private meta def loop (cfg : simp_config) (discharger : tactic unit) (to_unfold 
        new_es      ← update_simp_lemmas es new_fact_pr,
        new_r       ← update_simp_lemmas r new_fact_pr,
        let new_r := {new_type := new_h_type, pr := new_pr, ..e} :: new_r,
-       new_s       ← s.add new_fact_pr,
+       new_s       ← s.add new_fact_pr ff,
        loop new_es new_r new_s tt
 
 meta def simp_all (s : simp_lemmas) (to_unfold : list name) (cfg : simp_config := {}) (discharger : tactic unit := failed) : tactic unit :=

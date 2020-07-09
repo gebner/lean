@@ -47,6 +47,7 @@ struct vm_macro_definition : public vm_external {
     }
     virtual vm_external * ts_clone(vm_clone_fn const &) override { return new vm_macro_definition(m_val); }
     virtual vm_external * clone(vm_clone_fn const &) override { return new (get_vm_allocator().allocate(sizeof(vm_macro_definition))) vm_macro_definition(m_val); }
+    virtual unsigned int hash() { return 0; }
 };
 
 macro_definition const & to_macro_definition(vm_obj const & o) {
@@ -65,6 +66,7 @@ struct vm_expr : public vm_external {
     virtual void dealloc() override { this->~vm_expr(); get_vm_allocator().deallocate(sizeof(vm_expr), this); }
     virtual vm_external * ts_clone(vm_clone_fn const &) override { return new vm_expr(m_val); }
     virtual vm_external * clone(vm_clone_fn const &) override { return new (get_vm_allocator().allocate(sizeof(vm_expr))) vm_expr(m_val); }
+    virtual unsigned int hash() override { return m_val.hash(); }
 };
 
 bool is_expr(vm_obj const & o) {
@@ -281,6 +283,11 @@ vm_obj expr_instantiate_vars(vm_obj const & e, vm_obj const & vs) {
     to_buffer_expr(vs, vs_buf);
     return to_obj(instantiate(to_expr(e), vs_buf.size(), vs_buf.data()));
 }
+vm_obj expr_instantiate_vars_core(vm_obj const & e, vm_obj const & s, vm_obj const & vs) {
+    buffer<expr> vs_buf;
+    to_buffer_expr(vs, vs_buf);
+    return to_obj(instantiate(to_expr(e), to_unsigned(s), vs_buf.size(), vs_buf.data()));
+}
 
 vm_obj expr_abstract_local(vm_obj const & e, vm_obj const & n) {
     return to_obj(abstract_local(to_expr(e), to_name(n)));
@@ -459,7 +466,7 @@ vm_obj expr_subst(vm_obj const &, vm_obj const & _e1, vm_obj const & _e2) {
     if (is_lambda(e1)) {
         return to_obj(instantiate(binding_body(e1), e2));
     } else {
-        return to_obj(e1);
+        return to_obj(mk_app(e1, e2));
     }
 }
 
@@ -499,6 +506,15 @@ vm_obj expr_mk_delayed_abstraction(vm_obj const & e, vm_obj const & ns) {
     return to_obj(mk_delayed_abstraction(to_expr(e), names));
 }
 
+vm_obj expr_get_delayed_abstraction_locals(vm_obj const & eo) {
+    expr e = to_expr(eo);
+    if (!is_delayed_abstraction(e)) { return mk_vm_none(); }
+    buffer<name> names;
+    buffer<expr> exprs;
+    get_delayed_abstraction_info(e, names, exprs);
+    return mk_vm_some(to_obj(names));
+}
+
 void initialize_vm_expr() {
     DECLARE_VM_BUILTIN(name({"expr", "var"}),              expr_var_intro);
     DECLARE_VM_BUILTIN(name({"expr", "sort"}),             expr_sort_intro);
@@ -522,6 +538,7 @@ void initialize_vm_expr() {
     DECLARE_VM_BUILTIN(name({"expr", "instantiate_nth_var"}),     expr_instantiate_nth_var);
     DECLARE_VM_BUILTIN(name({"expr", "instantiate_var"}),  expr_instantiate_var);
     DECLARE_VM_BUILTIN(name({"expr", "instantiate_vars"}), expr_instantiate_vars);
+    DECLARE_VM_BUILTIN(name({"expr", "instantiate_vars_core"}), expr_instantiate_vars_core);
     DECLARE_VM_BUILTIN(name({"expr", "subst"}),            expr_subst);
     DECLARE_VM_BUILTIN(name({"expr", "abstract_local"}),   expr_abstract_local);
     DECLARE_VM_BUILTIN(name({"expr", "abstract_locals"}),  expr_abstract_locals);
@@ -563,7 +580,8 @@ void initialize_vm_expr() {
     DECLARE_VM_BUILTIN(name({"expr", "is_internal_cnstr"}), expr_is_internal_cnstr);
     DECLARE_VM_BUILTIN(name({"expr", "get_nat_value"}), expr_get_nat_value);
 
-    DECLARE_VM_BUILTIN(name({"expr", "mk_delayed_abstraction"}), expr_mk_delayed_abstraction);
+    DECLARE_VM_BUILTIN(name({"expr", "mk_delayed_abstraction"}),         expr_mk_delayed_abstraction);
+    DECLARE_VM_BUILTIN(name({"expr", "get_delayed_abstraction_locals"}), expr_get_delayed_abstraction_locals);
 }
 
 void finalize_vm_expr() {

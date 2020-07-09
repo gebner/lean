@@ -34,7 +34,7 @@ static std::string parse_symbol(parser & p, char const * msg) {
         throw parser_error(msg, p.pos());
     }
     p.next();
-    return n.to_string();
+    return n.to_string_unescaped();
 }
 
 static unsigned parse_precedence_core(parser & p) {
@@ -43,13 +43,14 @@ static unsigned parse_precedence_core(parser & p) {
         return p.parse_small_nat();
     } else {
         environment env = p.env();
+        options opts = p.get_options();
         env = open_prec_aliases(env);
         parser::local_scope scope(p, env);
         expr pre_val = p.parse_expr(get_max_prec());
         expr nat = mk_constant(get_nat_name());
         pre_val  = mk_typed_expr(nat, pre_val);
         expr val = p.elaborate("notation", list<expr>(), pre_val).first;
-        vm_obj p = eval_closed_expr(env, "_precedence", nat, val, pos);
+        vm_obj p = eval_closed_expr(env, opts, "_precedence", nat, val, pos);
         if (optional<unsigned> _p = try_to_unsigned(p)) {
             return *_p;
         } else {
@@ -205,7 +206,7 @@ static auto parse_mixfix_notation(parser & p, mixfix_kind k, bool overload, nota
     }
 
     if (reserved_action && !explicit_pp)
-        pp_tk = reserved_transition->get_pp_token().to_string();
+        pp_tk = reserved_transition->get_pp_token().to_string_unescaped();
 
     if (grp == notation_entry_group::Reserve) {
         // reserve notation commands do not have a denotation
@@ -265,7 +266,7 @@ static name parse_quoted_symbol_or_token(parser & p, buffer<token_entry> & new_t
     if (p.curr_is_quoted_symbol()) {
         environment const & env = p.env();
         auto pp_tk = p.get_name_val();
-        auto tks   = utf8_trim(pp_tk.to_string());
+        auto tks   = utf8_trim(pp_tk.to_string_unescaped());
         auto tkcs  = tks.c_str();
         check_not_forbidden(tkcs);
         p.next();
@@ -280,7 +281,7 @@ static name parse_quoted_symbol_or_token(parser & p, buffer<token_entry> & new_t
         return pp_tk;
     } else if (p.curr_is_keyword()) {
         auto tk = p.get_token_info().token();
-        check_not_forbidden(tk.to_string().c_str());
+        check_not_forbidden(tk.to_string_unescaped().c_str());
         p.next();
         return tk;
     } else {
@@ -315,7 +316,7 @@ static void parse_notation_local(parser & p, buffer<expr> & locals) {
 }
 
 static unsigned get_precedence(environment const & env, buffer<token_entry> const & new_tokens, name const & token) {
-    std::string token_str = token.to_string();
+    std::string token_str = token.to_string_unescaped();
     for (auto const & e : new_tokens) {
         if (e.m_token == token_str)
             return *e.m_prec;
@@ -498,8 +499,8 @@ static notation_entry parse_notation_core(parser & p, bool overload, notation_en
     while ((grp != notation_entry_group::Reserve && !p.curr_is_token(get_assign_tk())) ||
            (grp == notation_entry_group::Reserve && !p.curr_is_command() && !p.curr_is_eof())) {
         bool used_default = false;
-        name pp_tk = parse_quoted_symbol_or_token(p, new_tokens, used_default).to_string();
-        name tk = utf8_trim(pp_tk.to_string());
+        name pp_tk = parse_quoted_symbol_or_token(p, new_tokens, used_default).to_string_unescaped();
+        name tk = utf8_trim(pp_tk.to_string_unescaped());
         if (auto at = find_next(reserved_pt, tk)) {
             // Remark: we are ignoring multiple actions in the reserved notation table
             transition const & trans = head(at).first;

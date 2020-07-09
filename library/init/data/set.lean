@@ -5,7 +5,7 @@ Authors: Leonardo de Moura
 -/
 prelude
 import init.meta.interactive
-import init.category.lawful
+import init.control.lawful
 
 universes u v
 def set (α : Type u) := α → Prop
@@ -46,6 +46,11 @@ protected def insert (a : α) (s : set α) : set α :=
 instance : has_insert α (set α) :=
 ⟨set.insert⟩
 
+instance : has_singleton α (set α) := ⟨λ a, {b | b = a}⟩
+
+instance : is_lawful_singleton α (set α) :=
+⟨λ a, funext $ λ b, propext $ or_false _⟩
+
 protected def union (s₁ s₂ : set α) : set α :=
 {a | a ∈ s₁ ∨ a ∈ s₂}
 
@@ -60,9 +65,6 @@ instance : has_inter (set α) :=
 
 def compl (s : set α) : set α :=
 {a | a ∉ s}
-
-instance : has_neg (set α) :=
-⟨compl⟩
 
 protected def diff (s t : set α) : set α :=
 {a ∈ s | a ∉ t}
@@ -85,17 +87,9 @@ instance : functor set :=
 { map := @set.image }
 
 instance : is_lawful_functor set :=
-{ id_map := begin
-    intros _ s, funext b,
-    dsimp [image, set_of],
-    exact propext ⟨λ ⟨b', ⟨_, _⟩⟩, ‹b' = b› ▸ ‹s b'›,
-                   λ _, ⟨b, ⟨‹s b›, rfl⟩⟩⟩,
-  end,
-  comp_map := begin
-    intros, funext c,
-    dsimp [image, set_of, function.comp],
-    exact propext ⟨λ ⟨a, ⟨h₁, h₂⟩⟩, ⟨g a, ⟨⟨a, ⟨h₁, rfl⟩⟩, h₂⟩⟩,
-                   λ ⟨b, ⟨⟨a, ⟨h₁, h₂⟩⟩, h₃⟩⟩, ⟨a, ⟨h₁, h₂.symm ▸ h₃⟩⟩⟩
-  end }
+{ id_map := λ _ s, funext $ λ b, propext ⟨λ ⟨_, sb, rfl⟩, sb, λ sb, ⟨_, sb, rfl⟩⟩,
+  comp_map := λ _ _ _ g h s, funext $ λ c, propext
+    ⟨λ ⟨a, ⟨h₁, h₂⟩⟩, ⟨g a, ⟨⟨a, ⟨h₁, rfl⟩⟩, h₂⟩⟩,
+     λ ⟨b, ⟨⟨a, ⟨h₁, h₂⟩⟩, h₃⟩⟩, ⟨a, ⟨h₁, by dsimp; cc⟩⟩⟩ }
 
 end set

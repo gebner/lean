@@ -219,7 +219,7 @@ static environment compile_decl(parser_info const & p, environment const & env,
                                 name const & c_name, name const & c_real_name, pos_info const & pos) {
     try {
         time_task _("compilation", p.mk_message(message_severity::INFORMATION), p.get_options(), c_real_name);
-        return vm_compile(env, env.get(c_real_name));
+        return vm_compile(env, p.get_options(), env.get(c_real_name));
     } catch (exception & ex) {
         // FIXME(gabriel): use position from exception
         auto out = p.mk_message(pos, WARNING);
@@ -786,7 +786,7 @@ environment single_definition_cmd_core(parser_info & p, decl_cmd_kind kind, cmd_
 
     auto begin_pos = p.cmd_pos();
     auto end_pos = p.pos();
-    scope_log_tree lt(logtree().mk_child({}, (get_namespace(env) + mlocal_pp_name(fn)).to_string(),
+    scope_log_tree lt(logtree().mk_child({}, (get_namespace(env) + mlocal_pp_name(fn)).escape(),
                                          {logtree().get_location().m_file_name, {begin_pos, end_pos}}));
 
     // skip elaboration of definitions during reparsing

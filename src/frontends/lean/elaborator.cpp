@@ -144,6 +144,15 @@ elaborator::elaborator(environment const & env, options const & opts, name const
     m_coercions = get_elaborator_coercions(opts);
 }
 
+elaborator::elaborator(type_context_old && ctx, options const & opts, name const & decl_name, bool recover_from_errors,
+                       bool in_pattern, bool in_quote):
+    m_env(ctx.env()), m_opts(opts), m_cache(), m_decl_name(decl_name),
+    m_ctx(std::move(ctx)),
+    m_recover_from_errors(recover_from_errors),
+    m_uses_infom(get_global_info_manager() != nullptr), m_in_pattern(in_pattern), m_in_quote(in_quote) {
+    m_coercions = get_elaborator_coercions(opts);
+}
+
 elaborator::~elaborator() {
     try {
         if (m_uses_infom && get_global_info_manager() && !in_thread_finalization()) {
@@ -564,7 +573,7 @@ optional<expr> elaborator::mk_Prop_to_bool_coercion(expr const & e, expr const &
 optional<expr> elaborator::mk_coercion_core(expr const & e, expr const & e_type, expr const & type, expr const & ref) {
     if (e_type == mk_Prop() && m_ctx.is_def_eq(type, mk_bool())) {
         return mk_Prop_to_bool_coercion(e, ref);
-    } else if (!has_expr_metavar(e_type) && !has_expr_metavar(type)) {
+    } else {
         expr has_coe_t;
         try {
             has_coe_t = mk_app(m_ctx, get_has_coe_t_name(), e_type, type);
@@ -594,8 +603,6 @@ optional<expr> elaborator::mk_coercion_core(expr const & e, expr const & e_type,
         expr coe_to_lift = mk_app(mk_constant(get_coe_to_lift_name(), {u_1, u_2}), e_type, type, *inst);
         expr coe         = mk_app(mk_constant(get_coe_name(), {u_1, u_2}), e_type, type, coe_to_lift, e);
         return some_expr(coe);
-    } else {
-        return none_expr();
     }
 }
 
@@ -688,25 +695,18 @@ optional<expr> elaborator::mk_coercion(expr const & e, expr e_type, expr type, e
     if (auto r = try_monad_coercion(e, e_type, type, ref)) {
         return r;
     }
-    if (!has_expr_metavar(e_type)) {
-        auto whnf_type = whnf(type);
-        if (is_pi(whnf_type)) {
-            if (auto r = mk_coercion_to_fn(e, e_type, ref)) {
-                return r;
-            }
-        }
-        if (is_sort(whnf_type)) {
-            if (auto r = mk_coercion_to_sort(e, e_type, ref)) {
-                return r;
-            }
-        }
-        if (!has_expr_metavar(type)) {
-            return mk_coercion_core(e, e_type, type, ref);
+    auto whnf_type = whnf(type);
+    if (is_pi(whnf_type)) {
+        if (auto r = mk_coercion_to_fn(e, e_type, ref)) {
+            return r;
         }
     }
-    trace_coercion_failure(e_type, type, ref,
-                            "was not considered because types contain metavariables");
-    return none_expr();
+    if (is_sort(whnf_type)) {
+        if (auto r = mk_coercion_to_sort(e, e_type, ref)) {
+            return r;
+        }
+    }
+    return mk_coercion_core(e, e_type, type, ref);
 }
 
 bool elaborator::is_def_eq(expr const & e1, expr const & e2) {
@@ -768,27 +768,21 @@ void elaborator::trace_coercion_fn_sort_failure(bool is_fn, expr const & e_type,
 optional<expr> elaborator::mk_coercion_to_fn_sort(bool is_fn, expr const & e, expr const & _e_type, expr const & ref) {
     if (!m_coercions) return none_expr();
     expr e_type = instantiate_mvars(_e_type);
-    if (!has_expr_metavar(e_type)) {
-        try {
-            bool mask[3] = { true, false, true };
-            expr args[2] = { e_type, e };
-            expr new_e = mk_app(m_ctx, is_fn ? get_coe_fn_name() : get_coe_sort_name(), 3, mask, args);
-            expr new_e_type = whnf(infer_type(new_e));
-            if ((is_fn && is_pi(new_e_type)) || (!is_fn && is_sort(new_e_type))) {
-                return some_expr(new_e);
-            }
-            trace_coercion_fn_sort_failure(is_fn, e_type, ref,
-                                           "coercion was successfully generated, but resulting type is not the expected one");
-            return none_expr();
-        } catch (app_builder_exception & ex) {
-            trace_coercion_fn_sort_failure(is_fn, e_type, ref,
-                                           "failed create coercion application using type class resolution "
-                                           "('set_option trace.app_builder true' and 'set_option trace.class_instances true' for more information)");
-            return none_expr();
+    try {
+        bool mask[3] = { true, false, true };
+        expr args[2] = { e_type, e };
+        expr new_e = mk_app(m_ctx, is_fn ? get_coe_fn_name() : get_coe_sort_name(), 3, mask, args);
+        expr new_e_type = whnf(infer_type(new_e));
+        if ((is_fn && is_pi(new_e_type)) || (!is_fn && is_sort(new_e_type))) {
+            return some_expr(new_e);
         }
-    } else {
         trace_coercion_fn_sort_failure(is_fn, e_type, ref,
-                                       "was not considered because type contain metavariables");
+                                        "coercion was successfully generated, but resulting type is not the expected one");
+        return none_expr();
+    } catch (app_builder_exception & ex) {
+        trace_coercion_fn_sort_failure(is_fn, e_type, ref,
+                                        "failed create coercion application using type class resolution "
+                                        "('set_option trace.app_builder true' and 'set_option trace.class_instances true' for more information)");
         return none_expr();
     }
 }
@@ -2039,7 +2033,7 @@ static expr ground_uvars(expr const & e) {
 
 expr elaborator::visit_by(expr const & e, optional<expr> const & expected_type) {
     lean_assert(is_by(e));
-    expr tac = strict_visit(get_by_arg(e), none_expr());
+    expr tac = (flet<bool>(m_term_goals, false), strict_visit(get_by_arg(e), none_expr()));
     tac = ground_uvars(tac);
     expr const & ref = e;
     expr mvar        = mk_metavar(expected_type, ref);
@@ -2311,7 +2305,7 @@ expr elaborator::mk_aux_meta_def(expr const & e, expr const & ref) {
     if (!is_constant(new_c)) {
         throw elaborator_exception(ref, "failed to create auxiliary definition");
     }
-    m_env = vm_compile(m_env, m_env.get(const_name(new_c)));
+    m_env = vm_compile(m_env, m_ctx.get_options(), m_env.get(const_name(new_c)));
     m_ctx.set_env(m_env);
     m_ctx.set_mctx(mctx);
     return new_c;
@@ -2871,6 +2865,9 @@ class visit_structure_instance_fn {
     // elaborated sources
     buffer<source> m_sources;
 
+    // Metavariables created for fields.
+    buffer<expr> m_field_mvars;
+
     /* Because field default values may introduce arbitrary dependencies on other field values (not only within a structure,
      * but even between a structure and its parent structures, in either direction), we cannot elaborate fields in a static
      * order. Instead, we register a metavar and an elaboration function for each field (create_field_mvars).
@@ -2910,16 +2907,11 @@ class visit_structure_instance_fn {
             } else {
                 name full_S_fname = m_S_name + S_fname;
                 expr pre_fval = mk_field_default_value(m_env, full_S_fname, [&](name const & fname) {
-                    // just insert mvars for now, we will check for any uninstantiated ones in `reduce_and_check_deps` below
+                    // just insert mvars for now, FIXME(gabriel) this used to be checked in `reduce_and_check_deps` below
                     return m_field2mvar[fname];
                 });
                 expr fval = m_elab.visit(pre_fval, some_expr(d));
-                /* Delta- and beta-reduce `_default` definition. This can remove dependencies when defaulting
-                 * a field of a parent structure.
-                 * For example, monad defaults applicative.seq in terms of map and bind. However, since map is part
-                 * of the subobject to_applicative as well, we get the recursive constraint
-                 * `?seq =?= monad.seq._default {to_functor := {map := ?map, ...}, seq := ?seq, ...} ?bind ...`
-                 * Reducing monad.seq._default allows `reduce_and_check_deps` below to remove the ?seq dependency. */
+                /* Delta- and beta-reduce `_default` definition. */
                 buffer<expr> args;
                 expr fn = get_app_args(fval, args);
                 if (is_constant(fn)) {
@@ -2935,7 +2927,13 @@ class visit_structure_instance_fn {
                     fval = mk_app(default_val, args);
                     fval = head_beta_reduce(fval);
                 }
-                reduce_and_check_deps(fval, full_S_fname);
+                /* For example, monad defaults applicative.seq in terms of map and bind. However, since map is part
+                 * of the subobject to_applicative as well, we get the recursive constraint
+                 * `?seq =?= monad.seq._default {to_functor := {map := ?map, ...}, seq := ?seq, ...} ?bind ...`
+                 * We need to remove this occurrence to please the occurs check when assigning the metavariable.
+                 */
+                if (m_use_subobjects)
+                    fval = reduce_projections_visitor(m_ctx)(fval);
                 return fval;
             }
         });
@@ -2974,6 +2972,7 @@ class visit_structure_instance_fn {
             } else {
                 /* struct field */
                 c_arg = m_elab.mk_metavar(S_fname.append_before("?"), d, m_ref);
+                m_field_mvars.push_back(c_arg);
 
                 /* Try to find field value, in the following order:
                  * 1) explicit value from m_fvalues
@@ -2988,16 +2987,24 @@ class visit_structure_instance_fn {
                     m_fnames_used.insert(S_fname);
                     expr const & p = m_fvalues[it - m_fnames.begin()];
                     m_field2elab.insert(S_fname, [=](expr const & d) {
-                        return m_elab.visit(p, some_expr(consume_auto_opt_param(d)));
+                        auto d2 = consume_auto_opt_param(d);
+                        auto e = m_elab.visit(p, some_expr(d2));
+                        if (auto e2 = m_elab.ensure_has_type(e, m_elab.infer_type(e), d2, p)) {
+                            return *e2;
+                        } else {
+                            return e;
+                        }
                     });
                 } else if (auto p = is_subobject_field(m_env, nested_S_name, S_fname)) {
                     /* subobject field */
+                    auto old_field_mvars_size = m_field_mvars.size();
                     auto num_used = m_fnames_used.size();
                     auto old_missing_fields = m_missing_fields;
                     auto nested = create_field_mvars(*p);
                     if (m_fnames_used.size() == num_used && field_from_source(S_fname)) {
                         // If the subobject doesn't contain any explicitly passed fields, we prefer to use
                         // its value directly from a source so that the two are definitionally equal
+                        m_field_mvars.resize(old_field_mvars_size);
                     } else if (!is_explicit(binding_info(c_type)) && m_fnames_used.size() == num_used &&
                             old_missing_fields.size() < m_missing_fields.size()) {
                         // If the subobject is a superclass, doesn't contain any explicitly passed fields,
@@ -3006,6 +3013,7 @@ class visit_structure_instance_fn {
                             return m_elab.mk_instance(d, m_ref);
                         });
                         m_missing_fields = old_missing_fields;
+                        m_field_mvars.resize(old_field_mvars_size);
                     } else {
                         // We assign the subtree to the mvar eagerly so that the mvars representing the nested
                         // structure parameters are assigned, which are not inlcuded in the m_mvar2field dependency
@@ -3057,40 +3065,6 @@ class visit_structure_instance_fn {
         return mk_pair(mk_app(c, c_args), c_type);
     }
 
-    /** Check `e` for dependencies on fields that have not been inserted yet.
-     * Also reduce projections containing mvars, which may remove dependencies.
-     * Example: `functor.map (functor.mk ?p1 ?m1 ?m2...) => ?m1`
-     */
-    void reduce_and_check_deps(expr & e, name const & full_S_fname) {
-        if (m_use_subobjects)
-            e = reduce_projections_visitor(m_ctx)(e);
-        name_set deps;
-        e = m_elab.instantiate_mvars(e);
-        for_each(e, [&](expr const & e, unsigned) {
-            name const *n;
-            if (is_metavar(e) && (n = m_mvar2field.find(mlocal_name(e))) && !m_ctx.is_assigned(e))
-                deps.insert(*n);
-            return has_expr_metavar(e);
-        });
-        if (!deps.empty()) {
-            throw field_not_ready_to_synthesize_exception([=]() {
-                format error = format("Failed to insert value for '") + format(full_S_fname) +
-                               format("', it depends on field(s) '");
-                bool first = true;
-                deps.for_each([&](name const & dep) {
-                    if (!first) error += format("', '");
-                    error += format(dep);
-                    first = false;
-                });
-                error += format("', but the value for these fields is not available.") + line() +
-                         format("Unfolded type/default value:") + line() +
-                         pp_until_meta_visible(m_elab.mk_fmt_ctx(), e) + line() +
-                         line();
-                return error;
-            });
-        }
-    }
-
     void elaborate_sources() {
         for (expr src : m_info.m_sources) {
             lean_assert(!m_elab.m_in_pattern);
@@ -3131,61 +3105,24 @@ class visit_structure_instance_fn {
         }
     }
 
-    /** Repeatedly try to elaborate fields whose dependencies have been elaborated.
-      * If we have not made any progress in a round, do a last one collecting any errors. */
-    void insert_field_values(expr const & e) {
-        bool done = false;
-        bool last_progress = true;
-
-        while (!done) {
-            done = true;
-            bool progress = false;
-            format error;
-            // Try to resolve helper metavars reachable from e. Note that `m_mvar2field` etc. may contain
-            // metavars unreachable from e because of backtracking.
-            expr e2 = m_elab.instantiate_mvars(e);
-            for_each(e2, [&](expr const & e, unsigned) {
-                if (is_metavar(e) && m_mvar2field.contains(mlocal_name(e))) {
-                    name S_fname = m_mvar2field[mlocal_name(e)];
-                    name full_S_fname = m_S_name + S_fname;
-                    expr expected_type = m_elab.infer_type(e);
-                    expr reduced_expected_type = m_elab.instantiate_mvars(expected_type);
-                    expr val;
-
-                    try {
-                        reduce_and_check_deps(reduced_expected_type, full_S_fname);
-                        /* note: we pass the reduced, mvar-free expected type. Otherwise auto params may fail with
-                         * "result contains meta-variables". */
-                        val = (*m_field2elab.find(S_fname))(reduced_expected_type);
-                    } catch (field_not_ready_to_synthesize_exception const & e) {
-                        done = false;
-                        if (!last_progress)
-                            error += e.m_fmt();
-                        return true;
-                    }
-
-                    expr val_type = m_elab.infer_type(val);
-                    if (auto val2 = m_elab.ensure_has_type(val, val_type, expected_type, m_ref)) {
-                        /* Make sure mvar is assigned, even if val2 is a meta var as well.
-                         * This is important for termination and the `instantiate_mvars` call in `operator()`.
-                         * Note that `ensure_has_type` has already unified their types, so this should not result
-                         * in any missed unifications.
-                         */
-                        lean_always_assert(m_ctx.match(e, *val2));
-                        trace_elab_detail(tout() << "inserted field '" << S_fname << "' with value '" << *val2 << "'"
-                                                 << "\n";)
-                        progress = true;
-                    } else {
-                        format msg = format("type mismatch at field '") + format(S_fname) + format("'");
-                        msg += m_elab.pp_type_mismatch(val, val_type, expected_type);
-                        throw elaborator_exception(val, msg);
-                    }
-                }
-                return has_metavar(e);
-            });
-            if (!last_progress && !progress)
-                throw elaborator_exception(m_ref, error);
-            last_progress = progress;
+    void insert_field_values() {
+        for (expr e : m_field_mvars) {
+            if (!m_mvar2field.contains(mlocal_name(e))) continue;
+            name S_fname = m_mvar2field[mlocal_name(e)];
+            name full_S_fname = m_S_name + S_fname;
+            e = m_elab.instantiate_mvars(e);
+            if (!is_metavar(e)) continue;
+            expr expected_type = m_elab.infer_type(e);
+            expr val = (*m_field2elab.find(S_fname))(expected_type);
+            expr val_type = m_elab.infer_type(val);
+            if (m_ctx.match(e, val)) {
+                trace_elab_detail(tout() << "inserted field '" << S_fname << "' with value '" << val << "'"
+                                         << "\n";)
+            } else {
+                format msg = format("type mismatch at field '") + format(S_fname) + format("'");
+                msg += m_elab.pp_type_mismatch(val, val_type, expected_type);
+                m_elab.report_or_throw(elaborator_exception(val, msg));
+            }
         }
     }
 public:
@@ -3227,7 +3164,7 @@ public:
         /* Make sure to unify first to propagate the expected type, we'll report any errors later on. */
         bool type_def_eq = !m_expected_type || m_elab.is_def_eq(*m_expected_type, c_type);
 
-        insert_field_values(e2);
+        insert_field_values();
 
         /* Check expected type */
         if (!type_def_eq) {
@@ -3483,7 +3420,15 @@ expr elaborator::visit_let(expr const & e, optional<expr> const & expected_type)
 
 expr elaborator::visit_placeholder(expr const & e, optional<expr> const & expected_type) {
     expr const & ref = e;
-    return mk_metavar(expected_type, ref);
+    expr mvar = mk_metavar(expected_type, ref);
+    if (is_explicit_placeholder(e)) {
+        if (auto pip = get_pos_info_provider()) {
+            if (auto pos = pip->get_pos_info(e)) {
+                m_underscores.insert(mvar, *pos);
+            }
+        }
+    }
+    return mvar;
 }
 
 static bool is_have_expr(expr const & e) {
@@ -3545,8 +3490,7 @@ expr elaborator::visit_suffices_expr(expr const & e, optional<expr> const & expe
 }
 
 static expr mk_emptyc(expr const & src) {
-    return copy_tag(src, mk_app(copy_tag(src, mk_constant(get_has_emptyc_emptyc_name())),
-                                copy_tag(src, mk_expr_placeholder())));
+    return copy_tag(src, mk_constant(get_has_emptyc_emptyc_name()));
 }
 
 expr elaborator::visit_emptyc_or_emptys(expr const & e, optional<expr> const & expected_type) {
@@ -3571,7 +3515,7 @@ expr elaborator::visit(expr const & e, optional<expr> const & expected_type) {
     flet<unsigned> inc_depth(m_depth, m_depth+1);
     trace_elab_detail(tout() << "[" << m_depth << "] visiting\n" << e << "\n";
                       if (expected_type) tout() << "expected type:\n" << instantiate_mvars(*expected_type) << "\n";);
-    return recover_expr_from_exception(expected_type, e, [&] () -> expr {
+    auto result = recover_expr_from_exception(expected_type, e, [&] () -> expr {
         if (is_placeholder(e)) {
             return visit_placeholder(e, expected_type);
         } else if (is_have_expr(e)) {
@@ -3610,6 +3554,19 @@ expr elaborator::visit(expr const & e, optional<expr> const & expected_type) {
             lean_unreachable(); // LCOV_EXCL_LINE
         }
     });
+    if (m_uses_infom && m_term_goals) {
+        try {
+            if (auto pip = get_pos_info_provider()) {
+                if (auto pos = pip->get_pos_info(e)) {
+                    auto type = expected_type ? *expected_type : infer_type(result);
+                    type = m_ctx.instantiate_mvars(type);
+                    auto s = ::lean::mk_tactic_state_for(m_env, m_opts, m_decl_name, m_ctx.mctx(), m_ctx.lctx(), type);
+                    m_info.add_term_goal(*pos, s);
+                }
+            }
+        } catch (exception &) {}
+    }
+    return result;
 }
 
 expr elaborator::get_default_numeral_type() {
@@ -3802,14 +3759,13 @@ void elaborator::synthesize() {
     process_holes();
 }
 
-void elaborator::report_error(tactic_state const & s, char const * state_header,
-                              char const * msg, expr const & ref) {
+void elaborator::report_error(tactic_state const & s, std::string const & msg, expr const & ref) {
     auto tc = std::make_shared<type_context_old>(m_env, m_opts, m_ctx.mctx(), m_ctx.lctx());
     auto pip = get_pos_info_provider();
     if (!pip) return;
     message_builder out(tc, m_env, get_global_ios(), pip->get_file_name(),
                         pip->get_pos_info_or_some(ref), ERROR);
-    out << msg << "\n" << state_header << "\n" << mk_pair(s.pp(), m_opts);
+    out << msg << "\n" << mk_pair(s.pp(), m_opts);
     out.report();
     m_has_errors = true;
 }
@@ -3822,9 +3778,25 @@ void elaborator::ensure_no_unassigned_metavars(expr & e) {
             if (is_metavar_decl_ref(e) && !m_ctx.is_assigned(e)) {
                 tactic_state s = mk_tactic_state_for(e);
                 if (m_recover_from_errors) {
-                    auto ty = m_ctx.mctx().get_metavar_decl(e).get_type();
-                    if (!has_synth_sorry(ty))
-                        report_error(s, "context:", "don't know how to synthesize placeholder", e);
+                    auto decl = m_ctx.mctx().get_metavar_decl(e);
+                    auto ty = decl.get_type();
+                    if (!has_synth_sorry(ty)) {
+                        sstream msg;
+                        msg << "don't know how to synthesize placeholder";
+                        if (auto pp_name = decl.get_pp_name()) {
+                            msg << " (" << *pp_name << ")";
+                        }
+                        msg << "\n";
+                        msg << "context:";
+                        report_error(s, msg.str(), e);
+                    }
+                    if (m_uses_infom) {
+                        if (auto pos = m_underscores.find(e)) {
+                            expr hole_args = mk_app(mk_constant(get_list_nil_name(), {mk_level_zero()}),
+                              mk_app(mk_constant(get_expr_name()), mk_constant(get_bool_ff_name())));
+                            m_info.add_hole_info(*pos, {pos->first, pos->second+1}, s, hole_args);
+                        }
+                    }
                     m_ctx.assign(e, copy_tag(e, mk_sorry(ty)));
                     ensure_no_unassigned_metavars(ty);
 

@@ -28,6 +28,7 @@ Author: Leonardo de Moura
 #include "library/tactic/simp_result.h"
 #include "library/tactic/simp_lemmas.h"
 #include "library/tactic/simp_util.h"
+#include "library/kernel_serializer.h"
 
 namespace lean {
 LEAN_THREAD_VALUE(bool, g_throw_ex, false);
@@ -35,7 +36,7 @@ LEAN_THREAD_VALUE(bool, g_throw_ex, false);
 struct simp_lemma_cell {
     simp_lemma_kind     m_kind;
     name                m_id;
-    levels              m_umetas;
+    unsigned            m_umetas;
     list<expr>          m_emetas;
     list<bool>          m_instances;
 
@@ -45,9 +46,8 @@ struct simp_lemma_cell {
     unsigned            m_priority;
     MK_LEAN_RC(); // Declare m_rc counter
     void dealloc();
-    simp_lemma_cell():m_kind(simp_lemma_kind::Simp) {}
     simp_lemma_cell(simp_lemma_kind k,
-                    name const & id, levels const & umetas, list<expr> const & emetas,
+                    name const & id, unsigned umetas, list<expr> const & emetas,
                     list<bool> const & instances, expr const & lhs, expr const & rhs,
                     expr const & proof, unsigned priority):
         m_kind(k), m_id(id), m_umetas(umetas), m_emetas(emetas), m_instances(instances),
@@ -56,7 +56,7 @@ struct simp_lemma_cell {
 
 struct regular_simp_lemma_cell : public simp_lemma_cell {
     bool m_is_permutation;
-    regular_simp_lemma_cell(name const & id, levels const & umetas, list<expr> const & emetas,
+    regular_simp_lemma_cell(name const & id, unsigned umetas, list<expr> const & emetas,
                             list<bool> const & instances, expr const & lhs, expr const & rhs,
                             expr const & proof, bool is_perm, unsigned priority):
         simp_lemma_cell(simp_lemma_kind::Simp, id, umetas, emetas, instances, lhs, rhs, proof, priority),
@@ -66,7 +66,7 @@ struct regular_simp_lemma_cell : public simp_lemma_cell {
 
 struct congr_lemma_cell : public simp_lemma_cell {
     list<expr> m_congr_hyps;
-    congr_lemma_cell(name const & id, levels const & umetas, list<expr> const & emetas,
+    congr_lemma_cell(name const & id, unsigned umetas, list<expr> const & emetas,
                      list<bool> const & instances, expr const & lhs, expr const & rhs,
                      expr const & proof, list<expr> const & congr_hyps, unsigned priority):
         simp_lemma_cell(simp_lemma_kind::Congr, id, umetas, emetas, instances, lhs, rhs, proof, priority),
@@ -88,10 +88,7 @@ void simp_lemma_cell::dealloc() {
     }
 }
 
-static simp_lemma_cell * g_dummy = nullptr;
-
-simp_lemma::simp_lemma():simp_lemma(g_dummy) {
-}
+simp_lemma::simp_lemma() : m_ptr(nullptr) {}
 
 simp_lemma::simp_lemma(simp_lemma_cell * ptr):m_ptr(ptr) {
     if (m_ptr) m_ptr->inc_ref();
@@ -130,7 +127,7 @@ name const & simp_lemma::get_id() const {
 }
 
 unsigned simp_lemma::get_num_umeta() const {
-    return length(m_ptr->m_umetas);
+    return m_ptr->m_umetas;
 }
 
 unsigned simp_lemma::get_num_emeta() const {
@@ -198,6 +195,8 @@ format simp_lemma::pp(formatter const & fmt) const {
 }
 
 bool operator==(simp_lemma const & r1, simp_lemma const & r2) {
+    if (r1.get_id() != r2.get_id())
+        return false;
     if (r1.kind() != r2.kind() || r1.get_lhs() != r2.get_lhs() || r1.get_rhs() != r2.get_rhs())
         return false;
     if (r1.kind() == simp_lemma_kind::Congr &&
@@ -206,23 +205,64 @@ bool operator==(simp_lemma const & r1, simp_lemma const & r2) {
     return true;
 }
 
-simp_lemma mk_simp_lemma(name const & id, levels const & umetas, list<expr> const & emetas,
+simp_lemma mk_simp_lemma(name const & id, unsigned umetas, list<expr> const & emetas,
                          list<bool> const & instances, expr const & lhs, expr const & rhs,
                          expr const & proof, bool is_perm, unsigned priority) {
     return simp_lemma(new regular_simp_lemma_cell(id, umetas, emetas, instances, lhs, rhs, proof, is_perm, priority));
 }
 
-simp_lemma mk_rfl_lemma(name const & id, levels const & umetas, list<expr> const & emetas,
+simp_lemma mk_rfl_lemma(name const & id, unsigned umetas, list<expr> const & emetas,
                         list<bool> const & instances, expr const & lhs, expr const & rhs, expr const & proof,
                         unsigned priority) {
     return simp_lemma(new simp_lemma_cell(simp_lemma_kind::Refl, id, umetas, emetas,
                                           instances, lhs, rhs, proof, priority));
 }
 
-simp_lemma mk_congr_lemma(name const & id, levels const & umetas, list<expr> const & emetas,
+simp_lemma mk_congr_lemma(name const & id, unsigned umetas, list<expr> const & emetas,
                           list<bool> const & instances, expr const & lhs, expr const & rhs,
                           expr const & proof, list<expr> const & congr_hyps, unsigned priority) {
     return simp_lemma(new congr_lemma_cell(id, umetas, emetas, instances, lhs, rhs, proof, congr_hyps, priority));
+}
+
+serializer & operator<<(serializer & s, simp_lemma const & sl) {
+    s << static_cast<unsigned>(sl.kind()) << sl.get_id() << sl.get_num_umeta();
+    write_list(s, sl.get_emetas());
+    write_list(s, sl.get_instances());
+    s << sl.get_lhs() << sl.get_rhs() << sl.get_proof() << sl.get_priority();
+    switch (sl.kind()) {
+        case simp_lemma_kind::Simp: s << sl.is_permutation(); break;
+        case simp_lemma_kind::Congr: write_list(s, sl.get_congr_hyps()); break;
+        default: break;
+    }
+    return s;
+}
+
+deserializer & operator>>(deserializer & d, simp_lemma & sl) {
+    unsigned kind, num_umeta, priority;
+    name id;
+    expr lhs, rhs, proof;
+    d >> kind >> id >> num_umeta;
+    auto emetas = read_list<expr>(d);
+    auto instances = read_list<bool>(d);
+    d >> lhs >> rhs >> proof >> priority;
+    switch (static_cast<simp_lemma_kind>(kind)) {
+        case simp_lemma_kind::Simp: {
+            bool is_perm; d >> is_perm;
+            sl = mk_simp_lemma(id, num_umeta, emetas, instances, lhs, rhs, proof, is_perm, priority);
+            break;
+        }
+        case simp_lemma_kind::Congr: {
+            auto congr_hyps = read_list<expr>(d);
+            sl = mk_congr_lemma(id, num_umeta, emetas, instances, lhs, rhs, proof, congr_hyps, priority);
+            break;
+        }
+        case simp_lemma_kind::Refl: {
+            sl = mk_rfl_lemma(id, num_umeta, emetas, instances, lhs, rhs, proof, priority);
+            break;
+        }
+        default: lean_unreachable();
+    }
+    return d;
 }
 
 simp_lemmas_for::simp_lemmas_for():
@@ -701,7 +741,7 @@ static bool is_refl_app(expr const & pr) {
 
 static simp_lemmas add_core(type_context_old & ctx, simp_lemmas const & s, name const & id,
                             levels const & univ_metas, buffer<expr> const & _emetas,
-                            expr const & e, expr const & h, unsigned priority) {
+                            expr const & e, expr const & h, bool symm, unsigned priority) {
     lean_assert(ctx.in_tmp_mode());
     list<expr_pair> ceqvs   = to_ceqvs(ctx, id, e, h);
     environment const & env = ctx.env();
@@ -729,14 +769,18 @@ static simp_lemmas add_core(type_context_old & ctx, simp_lemmas const & s, name 
         }
         expr rel, lhs, rhs;
         if (is_simp_relation(env, rule, rel, lhs, rhs) && is_constant(rel)) {
+            if (symm) {
+              proof = mk_symm(ctx, const_name(rel), proof);
+              std::swap(lhs, rhs);
+            }
             if (is_refl_app(proof)) {
                 // This case is for zeta-reduction, regular rfl-lemmas are already handled in add_core(name, ...)
-                new_s.insert(const_name(rel), mk_rfl_lemma(id, univ_metas, reverse_to_list(emetas),
-                                                           reverse_to_list(instances), lhs, rhs,
+                new_s.insert(const_name(rel), mk_rfl_lemma(id, length(univ_metas), to_list(emetas),
+                                                           to_list(instances), lhs, rhs,
                                                            proof, priority));
             } else {
-                new_s.insert(const_name(rel), mk_simp_lemma(id, univ_metas, reverse_to_list(emetas),
-                                                            reverse_to_list(instances), lhs, rhs,
+                new_s.insert(const_name(rel), mk_simp_lemma(id, length(univ_metas), to_list(emetas),
+                                                            to_list(instances), lhs, rhs,
                                                             proof, is_perm, priority));
             }
         }
@@ -746,14 +790,14 @@ static simp_lemmas add_core(type_context_old & ctx, simp_lemmas const & s, name 
 
 static simp_lemmas add_core(type_context_old & ctx, simp_lemmas const & s, name const & id,
                             buffer<level> const & univ_metas, buffer<expr> const & emetas,
-                            expr const & e, expr const & h, unsigned priority) {
-    return add_core(ctx, s, id, to_list(univ_metas), emetas, e, h, priority);
+                            expr const & e, expr const & h, bool symm, unsigned priority) {
+    return add_core(ctx, s, id, to_list(univ_metas), emetas, e, h, symm, priority);
 }
 
 static simp_lemmas add_core(type_context_old & ctx, simp_lemmas const & s, name const & id, levels const & univ_metas,
-                            expr const & e, expr const & h, unsigned priority) {
+                            expr const & e, expr const & h, bool symm, unsigned priority) {
     buffer<expr> emetas;
-    return add_core(ctx, s, id, univ_metas, emetas, e, h, priority);
+    return add_core(ctx, s, id, univ_metas, emetas, e, h, symm, priority);
 }
 
 bool is_rfl_lemma(expr type, expr pf) {
@@ -781,7 +825,7 @@ static levels mk_tmp_levels_for(type_context_old & ctx, declaration const & d) {
     return to_list(us);
 }
 
-static simp_lemmas add_core(type_context_old & ctx, simp_lemmas const & s, name const & cname, unsigned priority) {
+static simp_lemmas add_core(type_context_old & ctx, simp_lemmas const & s, name const & cname, bool symm, unsigned priority) {
     environment const & env = ctx.env();
     type_context_old::tmp_mode_scope scope(ctx);
     declaration const & d = env.get(cname);
@@ -800,18 +844,22 @@ static simp_lemmas add_core(type_context_old & ctx, simp_lemmas const & s, name 
         }
         expr lhs, rhs;
         lean_verify(is_eq(type, lhs, rhs));
+        if (symm) {
+            proof = mk_eq_symm(ctx, proof);
+            std::swap(lhs, rhs);
+        }
         simp_lemmas new_s = s;
-        new_s.insert(get_eq_name(), mk_rfl_lemma(cname, ls, to_list(emetas), to_list(instances),
+        new_s.insert(get_eq_name(), mk_rfl_lemma(cname, length(ls), to_list(emetas), to_list(instances),
                                                  lhs, rhs, proof, priority));
         return new_s;
     } else {
-        return add_core(ctx, s, cname, ls, type, proof, priority);
+        return add_core(ctx, s, cname, ls, type, proof, symm, priority);
     }
 }
 
 /* Extended version. If cname is a definition with equational lemmas associated to it, then
    add the equational lemmas. */
-static simp_lemmas ext_add_core(type_context_old & ctx, simp_lemmas const & s, name const & cname, unsigned priority) {
+static simp_lemmas ext_add_core(type_context_old & ctx, simp_lemmas const & s, name const & cname, bool symm, unsigned priority) {
     simp_lemmas r = s;
 
     // Note: for relations that are not in Prop, the definition will be both
@@ -822,10 +870,10 @@ static simp_lemmas ext_add_core(type_context_old & ctx, simp_lemmas const & s, n
     buffer<name> eqn_lemmas;
     get_ext_eqn_lemmas_for(ctx.env(), cname, eqn_lemmas);
     for (name const & eqn_lemma : eqn_lemmas)
-        r = add_core(ctx, r, eqn_lemma, priority);
+        r = add_core(ctx, r, eqn_lemma, false, priority);
 
     // the definition itself
-    r = add_core(ctx, r, cname, priority);
+    r = add_core(ctx, r, cname, symm, priority);
 
     if (is_eqp(r, s)) {
         report_failure(sstream() << "invalid simplification lemma '" << cname << "'");
@@ -1001,22 +1049,30 @@ static simp_lemmas add_congr_core(type_context_old & ctx, simp_lemmas const & s,
         }
     }
     simp_lemmas new_s = s;
-    new_s.insert(const_name(rel), mk_congr_lemma(n, ls, reverse_to_list(emetas),
-                                                 reverse_to_list(instances), lhs, rhs, proof, to_list(congr_hyps), prio));
+    new_s.insert(const_name(rel), mk_congr_lemma(n, length(ls), to_list(emetas), to_list(instances),
+        lhs, rhs, proof, to_list(congr_hyps), prio));
     return new_s;
 }
 
-simp_lemmas add(type_context_old & ctx, simp_lemmas const & s, name const & id, unsigned priority) {
-    return ext_add_core(ctx, s, id, priority);
+simp_lemmas add(type_context_old & ctx, simp_lemmas const & s, name const & id, bool symm, unsigned priority) {
+    return ext_add_core(ctx, s, id, symm, priority);
 }
 
-simp_lemmas add(type_context_old & ctx, simp_lemmas const & s, name const & id, expr const & e, expr const & h, unsigned priority) {
+simp_lemmas add(type_context_old & ctx, simp_lemmas const & s, name const & id, expr const & e, expr const & h, bool symm, unsigned priority) {
     type_context_old::tmp_mode_scope scope(ctx);
-    auto r = add_core(ctx, s, id, list<level>(), e, h, priority);
+    auto r = add_core(ctx, s, id, list<level>(), e, h, symm, priority);
     if (is_eqp(r, s)) {
         report_failure(sstream() << "invalid simplification lemma '" << id << "': " << e);
     }
     return r;
+}
+
+simp_lemmas add(type_context_old & ctx, simp_lemmas const & s, name const & id, unsigned priority) {
+    return add(ctx, s, id, false, priority);
+}
+
+simp_lemmas add(type_context_old & ctx, simp_lemmas const & s, name const & id, expr const & e, expr const & h, unsigned priority) {
+    return add(ctx, s, id, e, h, false, priority);
 }
 
 simp_lemmas add_congr(type_context_old & ctx, simp_lemmas const & s, name const & id, unsigned priority) {
@@ -1045,11 +1101,39 @@ simp_lemmas join(simp_lemmas const & s1, simp_lemmas const & s2) {
     return new_s1;
 }
 
-static void on_add_simp_lemma(environment const & env, name const & c, bool) {
+struct simp_cache_attr_data : public attr_data {
+    list<pair<name, simp_lemma>> m_sls;
+    simp_cache_attr_data() {}
+    simp_cache_attr_data(list<pair<name, simp_lemma>> const & sls) : m_sls(sls) {}
+
+    virtual unsigned hash() const override {
+        return 0; // This is probably ok.
+    }
+
+    void write(serializer & s) const { write_list(s, m_sls); }
+    void read(deserializer & d) { m_sls = read_list<pair<name, simp_lemma>>(d); }
+};
+
+using simp_cache_attr = typed_attribute<simp_cache_attr_data>;
+
+static name * g_simp_cache = nullptr;
+
+static simp_cache_attr const & get_simp_cache_attr() {
+    return static_cast<simp_cache_attr const &>(get_system_attribute(*g_simp_cache));
+}
+
+static environment on_add_simp_lemma(environment const & env, io_state const & ios,
+        name const & c, bool persistent, unsigned prio) {
     type_context_old ctx(env);
-    simp_lemmas s;
     flet<bool> set_ex(g_throw_ex, true);
-    ext_add_core(ctx, s, c, LEAN_DEFAULT_PRIORITY);
+    simp_lemmas sls = ext_add_core(ctx, simp_lemmas(), c, false, prio);
+
+    buffer<pair<name, simp_lemma>> sls_buf;
+    sls.for_each([&] (name const & rel, simp_lemma const & sl) {
+        sls_buf.push_back({rel, sl});
+    });
+
+    return get_simp_cache_attr().set(env, ios, c, prio, reverse_to_list(sls_buf), persistent);
 }
 
 static void on_add_congr_lemma(environment const & env, name const & c, bool) {
@@ -1063,11 +1147,16 @@ static simp_lemmas get_simp_lemmas_from_attribute(type_context_old & ctx, name c
     auto const & attr = get_attribute(ctx.env(), attr_name);
     buffer<name> simp_lemmas;
     attr.get_instances(ctx.env(), simp_lemmas);
-    unsigned i = simp_lemmas.size();
-    while (i > 0) {
-        i--;
-        name const & id = simp_lemmas[i];
-        result = ext_add_core(ctx, result, id, attr.get_prio(ctx.env(), id));
+    std::reverse(simp_lemmas.begin(), simp_lemmas.end());
+    auto & cache_attr = get_simp_cache_attr();
+    for (name const & id : simp_lemmas) {
+        if (auto cached = cache_attr.get(ctx.env(), id)) {
+            for (auto & sl : cached->m_sls) {
+                result.insert(sl.first, sl.second);
+            }
+        } else {
+            result = ext_add_core(ctx, result, id, false, attr.get_prio(ctx.env(), id));
+        }
     }
     return result;
 }
@@ -1099,7 +1188,14 @@ simp_lemmas_token register_simp_attribute(name const & user_name, std::initializ
     for (name const & attr_name : simp_attrs) {
         cfg.m_simp_attrs.push_back(attr_name);
         if (!is_system_attribute(attr_name)) {
-            register_system_attribute(basic_attribute::with_check(attr_name, "simplification lemma", on_add_simp_lemma));
+            register_system_attribute(basic_attribute(
+                attr_name, "simplification lemma",
+                [=](environment const & env, io_state const & ios, name const & n, unsigned prio, bool persistent) {
+                    return on_add_simp_lemma(env, ios, n, persistent, prio);
+                },
+                [](environment const & env, io_state const &, name const &, bool) {
+                    return env;
+                }));
         }
     }
     for (name const & attr_name : congr_attrs) {
@@ -1309,6 +1405,7 @@ struct vm_simp_lemmas : public vm_external {
     virtual void dealloc() override { this->~vm_simp_lemmas(); get_vm_allocator().deallocate(sizeof(vm_simp_lemmas), this); }
     virtual vm_external * ts_clone(vm_clone_fn const &) override { return new vm_simp_lemmas(m_val); }
     virtual vm_external * clone(vm_clone_fn const &) override { return new (get_vm_allocator().allocate(sizeof(vm_simp_lemmas))) vm_simp_lemmas(m_val); }
+    virtual unsigned int hash() { return 0; }
 };
 
 bool is_simp_lemmas(vm_obj const & o) {
@@ -1332,7 +1429,7 @@ vm_obj simp_lemmas_mk_default(vm_obj const & s) {
     LEAN_TACTIC_CATCH(tactic::to_state(s));
 }
 
-vm_obj simp_lemmas_add(vm_obj const & lemmas, vm_obj const & lemma, vm_obj const & s0) {
+vm_obj simp_lemmas_add(vm_obj const & lemmas, vm_obj const & lemma, vm_obj const & symm, vm_obj const & s0) {
     tactic_state s = tactic::to_state(s0);
     LEAN_TACTIC_TRY;
     tactic_state_context_cache cache(s);
@@ -1353,17 +1450,17 @@ vm_obj simp_lemmas_add(vm_obj const & lemmas, vm_obj const & lemma, vm_obj const
     type_context_old::tmp_mode_scope scope(ctx, umetas.size(), emetas.size());
     expr e_type = ctx.infer(e);
     simp_lemmas new_lemmas = add_core(ctx, to_simp_lemmas(lemmas), id, umetas, emetas,
-                                      e_type, e, LEAN_DEFAULT_PRIORITY);
+                                      e_type, e, to_bool(symm), LEAN_DEFAULT_PRIORITY);
     return tactic::mk_success(to_obj(new_lemmas), s);
     LEAN_TACTIC_CATCH(s);
 }
 
-vm_obj simp_lemmas_add_simp(vm_obj const & lemmas, vm_obj const & lemma_name, vm_obj const & s0) {
+vm_obj simp_lemmas_add_simp(vm_obj const & lemmas, vm_obj const & lemma_name, vm_obj const & symm, vm_obj const & s0) {
     tactic_state s = tactic::to_state(s0);
     LEAN_TACTIC_TRY;
     tactic_state_context_cache cache(s);
     type_context_old ctx = cache.mk_type_context();
-    simp_lemmas new_lemmas = add(ctx, to_simp_lemmas(lemmas), to_name(lemma_name), LEAN_DEFAULT_PRIORITY);
+    simp_lemmas new_lemmas = add(ctx, to_simp_lemmas(lemmas), to_name(lemma_name), to_bool(symm), LEAN_DEFAULT_PRIORITY);
     return tactic::mk_success(to_obj(new_lemmas), s);
     LEAN_TACTIC_CATCH(s);
 }
@@ -1577,17 +1674,18 @@ vm_obj vm_mk_simp_attr_decl_name(vm_obj const & n) {
 }
 
 void initialize_simp_lemmas() {
-    g_dummy               = new simp_lemma_cell();
     g_simp_lemmas_configs = new std::vector<simp_lemmas_config>();
     g_name2simp_token     = new name_map<unsigned>();
     g_default_token       = register_simp_attribute("default", {"simp", "wrapper_eq"}, {"congr"});
     g_refl_lemma_attr     = new name{"_refl_lemma"};
+    g_simp_cache          = new name{"_simp_cache"};
     register_trace_class("simp_lemmas");
     register_trace_class("simp_lemmas_cache");
     register_trace_class(name{"simp_lemmas", "failure"});
     register_trace_class(name{"simp_lemmas", "invalid"});
     register_system_attribute(basic_attribute(
             *g_refl_lemma_attr, "marks that a lemma that can be used by the defeq simplifier"));
+    register_system_attribute(simp_cache_attr(*g_simp_cache, "(internal) simplifier cache"));
 
     DECLARE_VM_BUILTIN(name({"simp_lemmas", "mk"}), simp_lemmas_mk);
     DECLARE_VM_BUILTIN(name({"simp_lemmas", "join"}), simp_lemmas_join);
@@ -1607,9 +1705,9 @@ void initialize_simp_lemmas() {
 }
 
 void finalize_simp_lemmas() {
+    delete g_simp_cache;
     delete g_simp_lemmas_configs;
     delete g_name2simp_token;
-    delete g_dummy;
     delete g_refl_lemma_attr;
 }
 }

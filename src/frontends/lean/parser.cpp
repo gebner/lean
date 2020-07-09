@@ -189,7 +189,7 @@ void parser::check_break_at_pos(break_at_pos_exception::token_context ctxt) {
             // context).
             if (m_complete && m_break_at_pos->second == p.second + tk.utf8_size() - 1 &&
                     !curr_is_token(get_period_tk())) {
-                auto s = tk.to_string();
+                auto s = tk.to_string_unescaped();
                 if (!is_id_rest(get_utf8_last_char(s.c_str()), s.c_str() + s.size()))
                     return;
             }
@@ -222,7 +222,7 @@ void parser::scan() {
         m_curr = m_scanner.scan(m_env);
         // when breaking on a '.' token trailing an identifier, report them as a single, concatenated token
         if (*m_break_at_pos == pos() && curr_is_token(get_period_tk()))
-            throw break_at_pos_exception(curr_pos, name(curr_ident.to_string() + get_period_tk()));
+            throw break_at_pos_exception(curr_pos, name(curr_ident.escape() + get_period_tk()));
         return;
     }
     m_curr = m_scanner.scan(m_env);
@@ -257,8 +257,11 @@ void parser_info::updt_options() {
 
 void parser::sync_command() {
     // Keep consuming tokens until we find a Command or End-of-file
-    while (curr() != token_kind::CommandKeyword && curr() != token_kind::Eof)
-        next();
+    while (curr() != token_kind::CommandKeyword && curr() != token_kind::Eof) {
+        try {
+            next();
+        } catch (parser_exception &) {}
+    }
 }
 
 tag parser::get_tag(expr e) {
@@ -634,9 +637,27 @@ unsigned parser_info::get_local_index(name const & n) const {
 
 void parser_info::get_include_variables(buffer<expr> & vars) const {
     m_include_vars.for_each([&](name const & n) {
-            vars.push_back(*get_local(n));
+            if (auto v = get_local(n)) {
+                vars.push_back(*v);
+            }
         });
 }
+
+void parser_info::get_include_var_names(buffer<name> & vars) const {
+    m_include_vars.for_each([&](name const & n) {
+            vars.push_back(n);
+        });
+}
+
+void parser_info::get_available_include_var_names(buffer<expr> & vars) const {
+    for_each(m_local_decls.get_entries(),
+             [&](pair<name, expr> p) {
+                 if (m_variables.contains(mlocal_name(p.second))) {
+                     vars.push_back(p.second);
+                 }
+             } );
+}
+
 
 list<expr> parser_info::locals_to_context() const {
     return map_filter<expr>(m_local_decls.get_entries(),
@@ -1087,7 +1108,7 @@ void parser::parse_binders_core(buffer<expr> & r, parse_binders_config & cfg) {
             optional<binder_info> bi = parse_optional_binder_info(cfg.m_simple_only);
             if (bi) {
                 if (first && cfg.m_infer_kind != nullptr) {
-                    /* Parse {} or () prefix */
+                    /* Parse {}, [], or () prefix */
                     if (bi->is_implicit() && curr_is_token(get_rcurly_tk())) {
                         next();
                         *cfg.m_infer_kind = implicit_infer_kind::RelaxedImplicit;
@@ -1098,8 +1119,13 @@ void parser::parse_binders_core(buffer<expr> & r, parse_binders_config & cfg) {
                         *cfg.m_infer_kind = implicit_infer_kind::None;
                         first             = false;
                         continue;
-                    } else {
+                    } else if (bi->is_inst_implicit() && curr_is_token(get_rbracket_tk())) {
+                        next();
                         *cfg.m_infer_kind = implicit_infer_kind::Implicit;
+                        first             = false;
+                        continue;
+                    } else {
+                        *cfg.m_infer_kind = implicit_infer_kind::RelaxedImplicit;
                     }
                 }
                 unsigned rbp = 0;
@@ -1257,7 +1283,7 @@ static bool curr_is_terminator_of_exprs_action(parser const & p, list<pair<notat
         notation::action const & a = pr.first.get_action();
         if (a.kind() == notation::action_kind::Exprs &&
             a.get_terminator() &&
-            p.curr_is_token(name(utf8_trim(a.get_terminator()->to_string())))) {
+            p.curr_is_token(name(utf8_trim(a.get_terminator()->to_string_unescaped())))) {
             r = &pr;
             return true;
         }
@@ -1353,10 +1379,10 @@ expr parser::parse_notation(parse_table t, expr * left) {
             buffer<expr> r_args;
             auto terminator = a.get_terminator();
             if (terminator)
-                terminator = some(name(utf8_trim(terminator->to_string()))); // remove padding
+                terminator = some(name(utf8_trim(terminator->to_string_unescaped()))); // remove padding
             if (!terminator || !curr_is_token(*terminator)) {
                 r_args.push_back(parse_expr(a.rbp()));
-                name sep = utf8_trim(a.get_sep().to_string()); // remove padding
+                name sep = utf8_trim(a.get_sep().to_string_unescaped()); // remove padding
                 while (curr_is_token(sep)) {
                     check_break();
                     next();
@@ -1369,7 +1395,7 @@ expr parser::parse_notation(parse_table t, expr * left) {
                     next();
                 } else {
                     maybe_throw_error({sstream() << "invalid composite expression, '"
-                                                 << *terminator << "' expected" , pos()});
+                                                 << terminator->to_string_unescaped() << "' expected" , pos()});
                 }
             }
             has_Exprs = true;
@@ -2110,7 +2136,7 @@ name parser::check_constant_next(char const * msg) {
     name id = check_id_next(msg);
     try {
         return to_constant(id, msg, p);
-    } catch (parser_error e) {
+    } catch (parser_error & e) {
         maybe_throw_error(std::move(e));
         return id;
     }
@@ -2196,7 +2222,7 @@ expr parser::parse_nud() {
             lean_assert(is_local(e));
             // note: This number is not accurate for an escaped identifier. We should be able to do a better job
             // in the new backtracking parser.
-            auto id_len = utf8_strlen(id.to_string().c_str());
+            auto id_len = utf8_strlen(id.escape().c_str());
             auto p = pos();
             if (p.first == id_pos.first && p.second == id_pos.second + id_len) {
                 next();
@@ -2290,6 +2316,15 @@ optional<expr> parser::maybe_parse_expr(unsigned rbp) {
     auto _ = backtracking_scope();
     try {
         auto res = parse_expr(rbp);
+        if (consumed_input()) return some_expr(res);
+    } catch (backtracking_exception) {}
+    return none_expr();
+}
+
+optional<expr> parser::maybe_parse_pattern(unsigned rbp) {
+    auto _ = backtracking_scope();
+    try {
+        auto res = parse_pattern_or_expr(rbp);
         if (consumed_input()) return some_expr(res);
     } catch (backtracking_exception) {}
     return none_expr();
@@ -2410,7 +2445,7 @@ void parser::parse_mod_doc_block() {
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
 
-void parser::parse_imports(unsigned & fingerprint, std::vector<module_name> & imports) {
+bool parser::parse_imports(unsigned & fingerprint, std::vector<module_name> & imports) {
     init_scanner();
     scanner::field_notation_scope scope(m_scanner, false);
     m_last_cmd_pos = pos();
@@ -2464,16 +2499,32 @@ void parser::parse_imports(unsigned & fingerprint, std::vector<module_name> & im
                     module_name m(f);
                     imports.push_back(m);
                 }
-                next();
+                // HACK: always consume tokens with break_at_pos,
+                // otherwise go-to-definition doesn't work on last import.
+                bool should_consume_next = m_break_at_pos || ([&] {
+                    scanner::lookahead_scope _scope(m_scanner);
+                    auto curr = m_scanner.scan(m_env);
+                    bool is_import_tk =
+                        (curr == token_kind::Keyword || curr == token_kind::CommandKeyword) &&
+                        get_token_info().value() == get_import_tk();
+                    return m_scanner.get_pos() != 0 || is_import_tk;
+                })();
+                if (should_consume_next) {
+                    next();
+                } else {
+                    // let process_import scan this token again after importing the dependencies
+                    return true;
+                }
             } catch (break_at_pos_exception & e) {
                 if (k_init)
-                    e.m_token_info.m_token = std::string(k + 1, '.') + e.m_token_info.m_token.to_string();
+                    e.m_token_info.m_token = std::string(k + 1, '.') + e.m_token_info.m_token.to_string_unescaped();
                 e.m_token_info.m_context = break_at_pos_exception::token_context::import;
                 e.m_token_info.m_pos = p;
                 throw;
             }
         }
     }
+    return false;
 }
 
 void parser::process_imports() {
@@ -2482,9 +2533,10 @@ void parser::process_imports() {
 
     std::exception_ptr exception_during_scanning;
     auto begin_pos = pos();
+    bool needs_to_scan_again = false;
     try {
-        parse_imports(fingerprint, imports);
-    } catch (parser_exception) {
+        needs_to_scan_again = parse_imports(fingerprint, imports);
+    } catch (parser_exception &) {
         exception_during_scanning = std::current_exception();
     }
 
@@ -2533,6 +2585,10 @@ void parser::process_imports() {
     m_env = activate_export_decls(m_env, {}); // explicitly activate exports in root namespace
     m_env = replay_export_decls_core(m_env, m_ios);
     m_imports_parsed = true;
+
+    if (needs_to_scan_again) {
+        next();
+    }
 
     if (exception_during_scanning) std::rethrow_exception(exception_during_scanning);
 }

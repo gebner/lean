@@ -716,8 +716,8 @@ vm_obj tactic_add_decl(vm_obj const & _d, vm_obj const & _s) {
     try {
         declaration d       = to_declaration(_d);
         environment new_env = module::add(s.env(), check(s.env(), d));
-        new_env = vm_compile(new_env, d);
-         return tactic::mk_success(set_env(s, new_env));
+        new_env = vm_compile(new_env, s.get_options(), d);
+        return tactic::mk_success(set_env(s, new_env));
     } catch (throwable & ex) {
         return tactic::mk_exception(ex, s);
     }
@@ -780,10 +780,7 @@ vm_obj tactic_olean_doc_strings(vm_obj const & _s) {
         else
             decl_name = mk_vm_none();
         vm_obj lst = mk_vm_simple(0);
-        unsigned j = entries[i].m_docs.size();
-        while (j > 0) {
-            --j;
-            auto const& doc = entries[i].m_docs[j];
+        for (auto & doc : entries[i].m_docs) {
             vm_obj line = mk_vm_nat(doc.first.first);
             vm_obj column = mk_vm_nat(doc.first.second);
             vm_obj pos = mk_vm_constructor(0, line, column); // pos_info
@@ -812,12 +809,13 @@ format tactic_state::pp() const {
             expr code            = mk_app(mk_constant("to_fmt", {mk_level_zero()}), ts_expr, *to_fmt_inst);
             expr type            = ctx.infer(code);
             environment new_env  = ctx.env();
+            options opts         = ctx.get_options();
             bool use_conv_opt    = true;
             bool is_trusted      = false;
             name pp_name("_pp_tactic_state");
             auto cd              = check(new_env, mk_definition(new_env, pp_name, {}, type, code, use_conv_opt, is_trusted));
             new_env              = new_env.add(cd);
-            new_env              = vm_compile(new_env, new_env.get(pp_name));
+            new_env              = vm_compile(new_env, opts, new_env.get(pp_name));
             vm_state S(new_env, get_options());
             vm_obj r             = S.invoke(pp_name, to_obj(*this));
             std::ostringstream ss;
@@ -1016,18 +1014,47 @@ vm_obj tactic_get_tag(vm_obj const & g, vm_obj const & s0) {
     }
 }
 
-vm_obj tactic_unfreeze_local_instances(vm_obj const & s0) {
-    tactic_state s             = tactic::to_state(s0);
+vm_obj tactic_get_trace_msg_pos(vm_obj const & s0) {
+    tactic_state s = tactic::to_state(s0);
+    auto pos = get_trace_msg_pos();
+    return tactic::mk_success(mk_vm_pair(mk_vm_simple(pos.first), mk_vm_simple(pos.second)), s);
+}
+
+static tactic_state change_temperature_of_local_instances(tactic_state s, bool freeze) {
     optional<metavar_decl> g   = s.get_main_goal_decl();
-    if (!g) return mk_no_goals_exception(s);
+    if (!g) return s;
     local_context lctx         = g->get_context();
+    if (!!lctx.get_frozen_local_instances() == freeze) return s;
     tactic_state_context_cache cache(s);
     type_context_old ctx           = cache.mk_type_context();
-    lctx.unfreeze_local_instances();
+    if (freeze) {
+        lctx.freeze_local_instances(ctx.get_local_instances());
+    } else {
+        lctx.unfreeze_local_instances();
+    }
     expr new_mvar              = ctx.mk_metavar_decl(lctx, g->get_type());
     ctx.assign(*s.get_main_goal(), new_mvar);
-    tactic_state new_s = set_mctx_goals(s, ctx.mctx(), cons(new_mvar, tail(s.goals())));
-    return tactic::mk_success(new_s);
+    return set_mctx_goals(s, ctx.mctx(), cons(new_mvar, tail(s.goals())));
+}
+
+tactic_state unfreeze_local_instances(tactic_state const & s) {
+    return change_temperature_of_local_instances(s, false);
+}
+
+tactic_state freeze_local_instances(tactic_state const & s) {
+    return change_temperature_of_local_instances(s, true);
+}
+
+vm_obj tactic_unfreeze_local_instances(vm_obj const & s0) {
+    tactic_state s             = tactic::to_state(s0);
+    s = unfreeze_local_instances(s);
+    return tactic::mk_success(s);
+}
+
+vm_obj tactic_freeze_local_instances(vm_obj const & s0) {
+    tactic_state s             = tactic::to_state(s0);
+    s = freeze_local_instances(s);
+    return tactic::mk_success(s);
 }
 
 vm_obj tactic_frozen_local_instances(vm_obj const & s0) {
@@ -1098,7 +1125,9 @@ void initialize_tactic_state() {
     DECLARE_VM_BUILTIN(name({"tactic", "tags_enabled"}),         tactic_tags_enabled);
     DECLARE_VM_BUILTIN(name({"tactic", "set_tag"}),              tactic_set_tag);
     DECLARE_VM_BUILTIN(name({"tactic", "get_tag"}),              tactic_get_tag);
+    DECLARE_VM_BUILTIN(name({"tactic", "get_trace_msg_pos"}),    tactic_get_trace_msg_pos);
     DECLARE_VM_BUILTIN(name({"tactic", "unfreeze_local_instances"}), tactic_unfreeze_local_instances);
+    DECLARE_VM_BUILTIN(name({"tactic", "freeze_local_instances"}),   tactic_freeze_local_instances);
     DECLARE_VM_BUILTIN(name({"tactic", "frozen_local_instances"}),   tactic_frozen_local_instances);
     DECLARE_VM_BUILTIN(name({"io", "run_tactic"}),               io_run_tactic);
 }

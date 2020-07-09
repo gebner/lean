@@ -5,16 +5,16 @@ Authors: Leonardo de Moura
 -/
 prelude
 import init.meta init.data.sigma.lex init.data.nat.lemmas init.data.list.instances
-import init.data.list.qsort init.data.string.instances
+import init.data.list.qsort
 
 /- TODO(Leo): move this lemma, or delete it after we add algebraic normalizer. -/
 lemma nat.lt_add_of_zero_lt_left (a b : nat) (h : 0 < b) : a < a + b :=
-suffices a + 0 < a + b, by {simp at this, assumption},
+show a + 0 < a + b,
 by {apply nat.add_lt_add_left, assumption}
 
 /- TODO(Leo): move this lemma, or delete it after we add algebraic normalizer. -/
 lemma nat.zero_lt_one_add (a : nat) : 0 < 1 + a :=
-suffices 0 < a + 1, by {simp, assumption},
+suffices 0 < a + 1, by {simp [nat.add_comm], assumption},
 nat.zero_lt_succ _
 
 /- TODO(Leo): move this lemma, or delete it after we add algebraic normalizer. -/
@@ -61,7 +61,7 @@ dunfold_target [``sizeof_measure, ``measure, ``inv_image] {fail_if_unchanged := 
 
 private meta def add_simps : simp_lemmas → list name → tactic simp_lemmas
 | s []      := return s
-| s (n::ns) := do s' ← s.add_simp n, add_simps s' ns
+| s (n::ns) := do s' ← s.add_simp n ff, add_simps s' ns
 
 private meta def collect_sizeof_lemmas (e : expr) : tactic simp_lemmas :=
 e.mfold simp_lemmas.mk $ λ c d s,
@@ -171,7 +171,10 @@ meta def default_dec_tac : tactic unit :=
 abstract $
 do clear_internals,
    unfold_wf_rel,
-   process_lex (unfold_sizeof >> cancel_nat_add_lt >> trivial_nat_lt)
+   -- The next line was adapted from code in mathlib by Scott Morrison.
+   -- Because `unfold_sizeof` could actually discharge the goal, add a test
+   -- using `done` to detect this.
+   process_lex (unfold_sizeof >> (done <|> (cancel_nat_add_lt >> trivial_nat_lt)))
 
 end well_founded_tactics
 

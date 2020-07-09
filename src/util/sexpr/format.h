@@ -164,7 +164,6 @@ public:
     }
     explicit format(name const & v):m_value(sexpr_text(sexpr(v))) {}
     format(format const & f1, format const & f2):m_value(sexpr_compose({f1.m_value, f2.m_value})) {}
-    format(format const & f):m_value(f.m_value) {}
     format_kind kind() const {
         return sexpr_kind(m_value);
     }
@@ -232,7 +231,6 @@ format group(format const & f);
 format above(format const & f1, format const & f2);
 format bracket(std::string const & l, format const & x, std::string const & r);
 format paren(format const & x);
-format wrap(format const & f1, format const & f2);
 
 // is_iterator
 template<typename T, typename = void>

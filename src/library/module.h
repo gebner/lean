@@ -16,6 +16,8 @@ Author: Leonardo de Moura
 #include "kernel/inductive/inductive.h"
 #include "library/io_state.h"
 #include "util/task.h"
+#include "util/rb_map.h"
+#include "library/string.h"
 
 namespace lean {
 class corrupted_file_exception : public exception {
@@ -37,6 +39,7 @@ using modification_list = std::vector<std::shared_ptr<modification const>>;
 struct loaded_module {
     std::string m_module_name;
     std::vector<module_name> m_imports;
+    unsigned m_src_hash, m_trans_hash;
     modification_list m_modifications;
     task<bool> m_uses_sorry;
 
@@ -86,19 +89,22 @@ optional<pos_info> get_decl_pos_info(environment const & env, name const & decl_
 environment add_transient_decl_pos_info(environment const & env, name const & decl_name, pos_info const & pos);
 
 /** \brief Store/Export module using \c env. */
-loaded_module export_module(environment const & env, std::string const & mod_name);
+loaded_module export_module(environment const & env, std::string const & mod_name, unsigned src_hash, unsigned trans_hash);
 void write_module(loaded_module const & mod, std::ostream & out);
 
 std::shared_ptr<loaded_module const> cache_preimported_env(
         loaded_module &&, environment const & initial_env,
         std::function<module_loader()> const & mk_mod_ldr);
 
-/** \brief Check whether we should try to load the given .olean file according to its header and Lean version. */
-bool is_candidate_olean_file(std::string const & file_name);
+/** \brief Checks whether we should try to load the given .olean file according to its header and Lean version.
+ * If yes, returns the hash (after normalizing line endings) of the Lean source to which it corresponds,
+ * otherwise returns none. */
+optional<unsigned> src_hash_if_is_candidate_olean(std::string const & file_name);
 
 struct olean_data {
     std::vector<module_name> m_imports;
     std::string m_serialized_modifications;
+    unsigned m_src_hash, m_trans_hash;
     bool m_uses_sorry;
 };
 olean_data parse_olean(std::istream & in, std::string const & file_name, bool check_hash = true);
@@ -149,7 +155,7 @@ environment add(environment const & env, certified_declaration const & d);
 environment add_doc_string(environment const & env, std::string const & doc, pos_info pos);
 
 /** \brief Returns the map of module-level docs indexed by source file name. */
-std::unordered_map<std::string, std::vector<std::pair<pos_info, std::string>>> const & get_doc_strings(environment const & env);
+rb_map<std::string, list<std::pair<pos_info, std::string>>, string_cmp> const & get_doc_strings(environment const & env);
 
 /** \brief Return true iff \c n is a definition added to the current module using #module::add */
 bool is_definition(environment const & env, name const & n);

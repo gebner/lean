@@ -12,17 +12,15 @@ meta constant environment : Type
 
 namespace environment
 /--
-Consider a type ψ which is an inductive datatype using a single constructor `mk (a : α) (b : β) : → ψ`.
+Consider a type `ψ` which is an inductive datatype using a single constructor `mk (a : α) (b : β) : ψ`.
 Lean will automatically make two projection functions `a : ψ → α`, `b : ψ → β`.
 Lean tags these declarations as __projections__.
 This helps the simplifier / rewriter not have to expand projectors.
 Eg `a (mk x y)` will automatically reduce to `x`.
 If you `extend` a structure, all of the projections on the parent will also be created for the child.
+Projections are also treated differently in the VM for efficiency.
 
-[TODO] any other reasons Lean treats projections differently to regular declarations?
-    I know that you get projection macros.
-[TODO] Are there projections that aren't arguments to constructors?
-[NOTE] projectors have nothing to do with the dot `mylist.map` syntax.
+Note that projections have nothing to do with the dot `mylist.map` syntax.
 
 You can find out if a declaration is a projection using `environment.is_projection` which returns `projection_info`.
 
@@ -49,8 +47,9 @@ structure projection_info :=
 
        inductive foo
        | one {} : foo -> foo   -- relaxed_implicit
-       | two ( ) : foo -> foo   -- none
-       | three : foo -> foo    -- implicit (default)
+       | two ( ) : foo -> foo  -- explicit
+       | two [] : foo -> foo   -- implicit
+       | three : foo -> foo    -- relaxed implicit (default)
 -/
 inductive implicit_infer_kind | implicit | relaxed_implicit | none
 instance implicit_infer_kind.inhabited : inhabited implicit_infer_kind := ⟨implicit_infer_kind.implicit⟩
@@ -67,12 +66,22 @@ meta constant mk_std          : nat → environment
 meta constant trust_lvl       : environment → nat
 /-- Add a new declaration to the environment -/
 meta constant add             : environment → declaration → exceptional environment
+/-- make declaration `n` protected -/
+meta constant mk_protected   : environment → name → environment
+
+/-- add declaration `d` and make it protected -/
+meta def add_protected (env : environment) (d : declaration) : exceptional environment := do
+env ← env.add d,
+pure $ env.mk_protected d.to_name
+
+/-- check if `n` is the name of a protected declaration -/
+meta constant is_protected    : environment → name → bool
 /-- Retrieve a declaration from the environment -/
 meta constant get             : environment → name → exceptional declaration
 meta def      contains (env : environment) (d : name) : bool :=
 match env.get d with
 | exceptional.success _      := tt
-| exceptional.exception ._ _ := ff
+| exceptional.exception _ := ff
 end
 
 meta constant add_defn_eqns (env : environment) (opt : options)
@@ -158,6 +167,17 @@ meta constant structure_fields : environment → name → option (list name)
 meta constant get_class_attribute_symbols : environment → name → name_set
 /-- The fingerprint of the environment is a hash formed from all of the declarations in the environment. -/
 meta constant fingerprint : environment → nat
+
+/-- Gets the equation lemmas for the declaration `n`. -/
+meta constant get_eqn_lemmas_for (env : environment) (n : name) : list name
+/-- Gets the equation lemmas for the declaration `n`, including lemmas for match statements, etc. -/
+meta constant get_ext_eqn_lemmas_for (env : environment) (n : name) : list name
+/--
+Adds the equation lemma `n`.
+It is added for the declaration `t.pi_codomain.get_app_fn.const_name` where `t` is the type of the equation lemma.
+-/
+meta constant add_eqn_lemma (env : environment) (n : name) : environment
+
 open expr
 
 meta constant unfold_untrusted_macros : environment → expr → expr

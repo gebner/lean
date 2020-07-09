@@ -4,7 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Leonardo de Moura
 -/
 prelude
-import init.meta.level init.category.monad init.meta.rb_map
+import init.meta.level init.control.monad init.meta.rb_map
 universes u v
 open native
 /-- Column and line position in a Lean source file. -/
@@ -84,12 +84,12 @@ meta constant macro_def : Type
     The VM replaces instances of this datatype with the C++ implementation. -/
 meta inductive expr (elaborated : bool := tt)
 /- A bound variable with a de-Bruijn index. -/
-| var      {} : nat → expr
+| var         : nat → expr
 /- A type universe: `Sort u` -/
-| sort     {} : level → expr
+| sort        : level → expr
 /- A global constant. These include definitions, constants and inductive type stuff present
 in the environment as well as hard-coded definitions. -/
-| const    {} : name → list level → expr
+| const       : name → list level → expr
 /- [WARNING] Do not trust the types for `mvar` and `local_const`,
 they are sometimes dummy values. Use `tactic.infer_type` instead. -/
 /- An `mvar` is a 'hole' yet to be filled in by the elaborator or tactic state. -/
@@ -185,8 +185,15 @@ meta constant expr.instantiate_nth_var : nat → expr → expr → expr
 meta constant expr.instantiate_var         : expr → expr → expr
 /-- ``instantiate_vars `(#0 #1 #2) [x,y,z] = `(%%x %%y %%z)`` -/
 meta constant expr.instantiate_vars        : expr → list expr → expr
-
-/-- Perform beta-reduction if the left expression is a lambda. Ie: ``expr.subst | `(λ x, %%Y) Z := Y[x/Z] | X Z := X``-/
+/-- Same as `instantiate_vars` except lifts and shifts the vars by the given amount.
+``instantiate_vars_core `(#0 #1 #2 #3) 0 [x,y] = `(x y #0 #1)``
+``instantiate_vars_core `(#0 #1 #2 #3) 1 [x,y] = `(#0 x y #1)``
+``instantiate_vars_core `(#0 #1 #2 #3) 2 [x,y] = `(#0 #1 x y)``
+-/
+meta constant expr.instantiate_vars_core        : expr → nat → list expr → expr
+/-- Perform beta-reduction if the left expression is a lambda, or construct an application otherwise.
+That is: ``expr.subst `(λ x, %%Y) Z = Y[x/Z]``, and
+``expr.subst X Z = X.app Z`` otherwise -/
 protected meta constant expr.subst : expr elab → expr elab → expr elab
 
 /-- `get_free_var_range e` returns one plus the maximum de-Bruijn value in `e`. Eg `get_free_var_range `(#1 #0)` yields `2` -/
@@ -239,6 +246,9 @@ meta constant expr.get_depth : expr → ℕ
     If `m` is not a metavariable then this is equivalent to `abstract_locals`.
  -/
 meta constant expr.mk_delayed_abstraction : expr → list name → expr
+/-- If the given expression is a delayed abstraction macro, return `some ls`
+where `ls` is a list of unique names of locals that will be abstracted. -/
+meta constant expr.get_delayed_abstraction_locals : expr → option (list name)
 
 /-- (reflected a) is a special opaque container for a closed `expr` representing `a`.
     It can only be obtained via type class inference, which will use the representation
@@ -255,10 +265,7 @@ id
 
 @[inline] meta def reflected.subst {α : Sort v} {β : α → Sort u} {f : Π a : α, β a} {a : α} :
   reflected f → reflected a → reflected (f a) :=
-λ ef ea, match ef with
-| (expr.lam _ _ _ _) := expr.subst ef ea
-| _                  := expr.app   ef ea
-end
+expr.subst
 
 attribute [irreducible] reflected reflected.subst reflected.to_expr
 
@@ -276,7 +283,7 @@ meta instance {α} (a : α) : has_to_format (reflected a) :=
 namespace expr
 open decidable
 
-meta def expr.lt_prop (a b : expr) : Prop :=
+meta def lt_prop (a b : expr) : Prop :=
 expr.lt a b = tt
 
 meta instance : decidable_rel expr.lt_prop :=
