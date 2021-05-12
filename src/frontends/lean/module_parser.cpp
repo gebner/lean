@@ -49,7 +49,7 @@ module_parser_result module_parser::parse(optional<std::vector<gtask>> const & d
         log_tree::DefaultLevel, true));
 
     module_parser_result res;
-    if (m_save_info)
+    if (m_save_snapshots)
         res.m_snapshot_at_end = m_parser.mk_snapshot();
     res.m_range = {{1, 0}, {1, 0}};
     res.m_lt = lt.get();
@@ -94,7 +94,7 @@ module_parser::parse_next_command_like(optional<std::vector<gtask>> const & depe
         lean_assert(end_pos >= begin_pos);
 
         module_parser_result res;
-        if (done || self->m_save_info)
+        if (done || self->m_save_snapshots)
             res.m_snapshot_at_end = self->m_parser.mk_snapshot();
         res.m_range = {begin_pos, end_pos};
         res.m_lt = logtree();
