@@ -326,6 +326,7 @@ server::server(unsigned num_threads, search_path const & path, environment const
     m_mod_mgr->set_report_widgets(report_widgets);
     set_global_module_mgr(*m_mod_mgr);
     m_mod_mgr->set_server_mode(true);
+    m_mod_mgr->set_save_info(true);
     m_mod_mgr->set_save_olean(false);
 }
 

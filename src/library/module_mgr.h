@@ -95,6 +95,7 @@ class module_mgr {
     bool m_save_olean = false;
     bool m_use_old_oleans = false;
     bool m_report_widgets = true;
+    bool m_save_info = false;
 
     search_path m_path;
     environment m_initial_env;
@@ -141,6 +142,8 @@ public:
     bool get_use_old_oleans() const { return m_use_old_oleans; }
     void set_report_widgets(bool report_widgets) { m_report_widgets = report_widgets; }
     bool get_report_widgets() const { return m_report_widgets; }
+    void set_save_info(bool save_info) { m_save_info = save_info; }
+    bool get_save_info() const { return m_save_info; }
 
     environment get_initial_env() const { return m_initial_env; }
     options get_options() const { return m_ios.get_options(); }

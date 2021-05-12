@@ -36,6 +36,7 @@ class module_parser : public std::enable_shared_from_this<module_parser> {
     pos_info m_end_pos;
 
     bool m_separate_tasks = true;
+    bool m_save_snapshots = false;
     bool m_save_info = false;
 
     pair<cancellation_token, task<module_parser_result>>
@@ -48,6 +49,7 @@ public:
 
     void use_separate_tasks(bool separate_tasks) { m_separate_tasks = separate_tasks; }
     void save_info(bool save) { m_save_info = save; }
+    void save_snapshots(bool save) { m_save_snapshots = save; }
     void break_at_pos(pos_info const & pos, bool complete);
 
     pair<cancellation_token, task<module_parser_result>>
