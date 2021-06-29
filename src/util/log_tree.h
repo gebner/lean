@@ -146,6 +146,7 @@ public:
     void print_to(std::ostream &) const;
     void print() const;
 
+    void clear_listeners();
     void add_listener(listener const & l);
 
     void for_each(std::function<bool(node const & n)> const &) const; // NOLINT

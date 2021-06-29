@@ -83,7 +83,7 @@ void task_queue::submit(gtask const & t, unsigned) {
 static task_queue * g_taskq = nullptr;
 
 void set_task_queue(task_queue * q) {
-    if (g_taskq) throw exception("cannot set task queue twice");
+//    if (g_taskq) throw exception("cannot set task queue twice");
     g_taskq = q;
 }
 
